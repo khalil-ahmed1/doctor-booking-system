@@ -42,8 +42,16 @@ const registerDoctor = async (req, res) => {
 };
 const getAllDoctors = async (req, res) => {
   try {
-    const doctors = await Doctor.find();
+    const keyword = req.query.specialization
+      ? {
+          specialization: {
+            $regex: req.query.specialization,
+            $options: "i",
+          },
+        }
+      : {};
 
+    const doctors = await Doctor.find(keyword);
     res.status(200).json({
       success: true,
       count: doctors.length,
