@@ -52,6 +52,21 @@ const doctorSchema = new mongoose.Schema(
       default: false,
     },
 
+    premiumStartTime: {
+      type: String,
+      default: "",
+    },
+
+    premiumEndTime: {
+      type: String,
+      default: "",
+    },
+
+    slotDuration: {
+      type: Number,
+      default: 20,
+    },
+
     subscriptionStatus: {
       type: String,
       default: "inactive",

@@ -38,10 +38,12 @@ const hashedPassword = await bcrypt.hash(password, salt);
 
 const loginUser = async (req, res) => {
   try {
-    const { mobile, password } = req.body;
+const { mobile, password } = req.body;
 
-    const user = await User.findOne({ mobile });
+console.log("Mobile received:", mobile);
+const user = await User.findOne({ mobile });
 
+console.log("User found:", user);
     if (!user) {
       return res.status(400).json({
         success: false,

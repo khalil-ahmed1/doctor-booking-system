@@ -7,7 +7,7 @@ const connectDB = require("./config/db");
 const doctorRoutes = require("./routes/doctorRoutes");
 dotenv.config();
 console.log(process.env.MONGO_URI);
-
+const appointmentRoutes = require("./routes/appointmentRoutes");
 connectDB();
 
 const app = express();
@@ -27,3 +27,4 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 app.use("/api/doctors", doctorRoutes);
+app.use("/api/appointments", appointmentRoutes);
