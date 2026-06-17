@@ -1,5 +1,5 @@
 const express = require("express");
-
+const { protect, doctorOnly } = require("../middleware/authMiddleware");
 const router = express.Router();
 const {
   registerDoctor,
@@ -7,14 +7,25 @@ const {
   getDoctorById,
   updatePremiumSchedule,
   getPremiumSlots,
+  getDoctorDashboard,
+  getMyDashboard,
 } = require("../controllers/doctorController");
 
 router.post("/register", registerDoctor);
 
+// Dashboard (must come first)
+router.get("/dashboard", protect, doctorOnly, getMyDashboard);
+
+// General routes
 router.get("/", getAllDoctors);
 
+// Dynamic routes
 router.get("/:id", getDoctorById);
+
 router.put("/:id/premium-schedule", updatePremiumSchedule);
+
 router.get("/:id/premium-slots", getPremiumSlots);
+
+router.get("/:id/dashboard", protect, doctorOnly, getDoctorDashboard);
 
 module.exports = router;

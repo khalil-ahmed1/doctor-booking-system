@@ -2,6 +2,12 @@ const mongoose = require("mongoose");
 
 const doctorSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
+    },
     name: {
       type: String,
       required: true,
@@ -41,7 +47,10 @@ const doctorSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-
+    premiumBookingEnabled: {
+      type: Boolean,
+      default: true,
+    },
     homeVisitFee: {
       type: Number,
       required: true,

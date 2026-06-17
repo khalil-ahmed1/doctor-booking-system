@@ -29,5 +29,42 @@ const protect = async (req, res, next) => {
     message: "No token provided",
   });
 };
+const doctorOnly = (req, res, next) => {
+  if (req.user.role !== "doctor") {
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. Doctor only.",
+    });
+  }
 
-module.exports = { protect };
+  next();
+};
+
+const patientOnly = (req, res, next) => {
+  if (req.user.role !== "patient") {
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. Patient only.",
+    });
+  }
+
+  next();
+};
+
+const adminOnly = (req, res, next) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. Admin only.",
+    });
+  }
+
+  next();
+};
+
+module.exports = {
+  protect,
+  doctorOnly,
+  patientOnly,
+  adminOnly,
+};

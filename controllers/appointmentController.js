@@ -66,7 +66,32 @@ const createPremiumAppointment = async (req, res) => {
         message: "Doctor not found",
       });
     }
+    if (!doctor.premiumBookingEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: "Premium booking is disabled for this doctor",
+      });
+    }
+    if (
+      slotTime < doctor.premiumStartTime ||
+      slotTime >= doctor.premiumEndTime
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid slot selected",
+      });
+    }
+    const bookingDate = new Date(slotDate);
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (bookingDate < today) {
+      return res.status(400).json({
+        success: false,
+        message: "Past dates cannot be booked",
+      });
+    }
     // 2. Check subscription
     if (
       !["active", "trial", "adminApproved"].includes(doctor.subscriptionStatus)
@@ -78,12 +103,19 @@ const createPremiumAppointment = async (req, res) => {
     }
 
     // 3. Check duplicate booking
+    
+    // Check if this premium slot is already booked
     const existingAppointment = await Appointment.findOne({
       doctorId,
-      slotDate,
+      slotDate: new Date(slotDate),
       slotTime,
       appointmentType: "premium",
+      status: {
+        $in: ["booked", "checked", "completed", "rescheduled"],
+      },
     });
+
+    console.log("Existing Appointment:", existingAppointment);
 
     if (existingAppointment) {
       return res.status(400).json({
@@ -106,7 +138,8 @@ const createPremiumAppointment = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Premium appointment created",
+      message: "Premium appointment booked successfully",
+      bookingReference: appointment.bookingReference,
       appointment,
     });
   } catch (error) {
