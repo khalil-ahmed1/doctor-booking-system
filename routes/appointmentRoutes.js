@@ -6,6 +6,7 @@ const {
   createNormalAppointment,
   getDoctorAppointments,
   markAppointmentChecked,
+  createPremiumAppointment,
 } = require("../controllers/appointmentController");
 const { protect } = require("../middleware/authMiddleware");
 
@@ -16,5 +17,6 @@ router.get("/test", (req, res) => {
   res.send("Appointment Route Working");
 });
 router.put("/:id/check", protect, markAppointmentChecked);
+router.post("/premium", protect, createPremiumAppointment);
 
 module.exports = router;

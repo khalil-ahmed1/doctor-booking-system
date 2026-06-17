@@ -27,7 +27,9 @@ const appointmentSchema = new mongoose.Schema(
     slotTime: {
       type: String,
     },
-
+    slotDate: {
+      type: Date,
+    },
     appointmentDate: {
       type: Date,
       default: Date.now,
