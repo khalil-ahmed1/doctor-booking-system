@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const ticketRoutes = require("./routes/ticketRoutes");
 
 // Load environment variables FIRST
 dotenv.config();
@@ -34,6 +35,7 @@ app.use("/api/doctors", doctorRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/tickets", ticketRoutes);
 
 // Start Server
 const PORT = process.env.PORT || 5000;

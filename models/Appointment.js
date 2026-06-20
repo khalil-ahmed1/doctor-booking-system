@@ -58,11 +58,10 @@ const appointmentSchema = new mongoose.Schema(
     // Payment
     paymentStatus: {
       type: String,
-
       enum: ["pending", "paid", "failed", "refunded"],
-
       default: "pending",
     },
+
     amountPaid: {
       type: Number,
       default: 0,
@@ -77,6 +76,7 @@ const appointmentSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
     orderId: {
       type: String,
       default: "",
@@ -95,7 +95,7 @@ const appointmentSchema = new mongoose.Schema(
       type: Date,
     },
 
-    // Ticket Number
+    // Booking Reference
     bookingReference: {
       type: String,
       unique: true,
@@ -106,6 +106,36 @@ const appointmentSchema = new mongoose.Schema(
     ticketDownloaded: {
       type: Boolean,
       default: false,
+    },
+
+    // ===========================
+    // HOME VISIT DETAILS
+    // ===========================
+
+    homeVisitAddress: {
+      type: String,
+      default: "",
+    },
+
+    homeVisitLandmark: {
+      type: String,
+      default: "",
+    },
+
+    homeVisitCity: {
+      type: String,
+      default: "",
+    },
+
+    homeVisitPincode: {
+      type: String,
+      default: "",
+    },
+
+    doctorResponse: {
+      type: String,
+      enum: ["pending", "accepted", "rejected"],
+      default: "pending",
     },
   },
   {

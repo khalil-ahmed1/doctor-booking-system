@@ -3,7 +3,7 @@ const generateToken = require("../config/generateToken");
 const bcrypt = require("bcryptjs");
 const registerUser = async (req, res) => {
   try {
-    const { name, mobile, email, password } = req.body;
+  const { name, mobile, email, password, role } = req.body;
 
     // Check if mobile already exists
     const existingUser = await User.findOne({ mobile });
@@ -17,12 +17,13 @@ const registerUser = async (req, res) => {
 const salt = await bcrypt.genSalt(10);
 
 const hashedPassword = await bcrypt.hash(password, salt);
-    const user = await User.create({
-      name,
-      mobile,
-      email,
-      password: hashedPassword,
-    });
+  const user = await User.create({
+    name,
+    mobile,
+    email,
+    password: hashedPassword,
+    role: role || "patient",
+  });
 
     res.status(201).json({
       success: true,

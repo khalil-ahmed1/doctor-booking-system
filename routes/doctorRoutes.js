@@ -9,12 +9,19 @@ const {
   getPremiumSlots,
   getDoctorDashboard,
   getMyDashboard,
+  updateHomeVisitStatus,
 } = require("../controllers/doctorController");
 
 router.post("/register", registerDoctor);
 
 // Dashboard (must come first)
 router.get("/dashboard", protect, doctorOnly, getMyDashboard);
+router.put(
+  "/home-visit/:appointmentId",
+  protect,
+  doctorOnly,
+  updateHomeVisitStatus,
+);
 
 // General routes
 router.get("/", getAllDoctors);

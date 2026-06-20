@@ -47,6 +47,9 @@ const verifyPayment = async (req, res) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
       req.body;
 
+    // Verify Signature
+    const crypto = require("crypto");
+
     const generatedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(razorpay_order_id + "|" + razorpay_payment_id)
@@ -59,6 +62,7 @@ const verifyPayment = async (req, res) => {
       });
     }
 
+    // Find Appointment
     const appointment = await Appointment.findOne({
       orderId: razorpay_order_id,
     });
@@ -70,12 +74,24 @@ const verifyPayment = async (req, res) => {
       });
     }
 
-    appointment.paymentStatus = "paid";
-    appointment.paymentId = razorpay_payment_id;
-    appointment.status = "confirmed";
-    appointment.paymentCompletedAt = new Date();
+    // Prevent Duplicate Payment
+    if (appointment.paymentStatus === "paid") {
+      return res.status(400).json({
+        success: false,
+        message: "Payment already completed",
+      });
+    }
 
-    await appointment.save();
+    // Update Appointment
+   appointment.paymentStatus = "paid";
+   appointment.status = "confirmed";
+
+   appointment.paymentId = razorpay_payment_id;
+   appointment.orderId = razorpay_order_id;
+   appointment.paymentMethod = "razorpay";
+   appointment.paymentCompletedAt = new Date();
+
+   await appointment.save();
 
     res.status(200).json({
       success: true,
@@ -89,7 +105,6 @@ const verifyPayment = async (req, res) => {
     });
   }
 };
-
 module.exports = {
   createOrder,
   verifyPayment,

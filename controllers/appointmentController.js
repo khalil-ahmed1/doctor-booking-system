@@ -50,13 +50,14 @@ const patientId = req.user._id;
 };
 
 const Doctor = require("../models/Doctor");
-
 const createPremiumAppointment = async (req, res) => {
   try {
-    const { doctorId, slotDate, slotTime } = req.body;
+  
+console.log("Request Body:", req.body);
 
+const { doctorId, slotDate, slotTime } = req.body;
     const patientId = req.user._id;
-
+console.log("Logged in user:", req.user);
     // 1. Find doctor
     const doctor = await Doctor.findById(doctorId);
 
@@ -133,12 +134,86 @@ const createPremiumAppointment = async (req, res) => {
       slotTime,
       paymentStatus: "pending",
       amountPaid: doctor.premiumFee,
-      status: "booked",
+      status: "pending_payment",
     });
 
     res.status(201).json({
       success: true,
       message: "Premium appointment booked successfully",
+      bookingReference: appointment.bookingReference,
+      appointment,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const createHomeVisitAppointment = async (req, res) => {
+  try {
+    const {
+      doctorId,
+      homeVisitAddress,
+      homeVisitLandmark,
+      homeVisitCity,
+      homeVisitPincode,
+    } = req.body;
+
+    const patientId = req.user._id;
+
+    // Find doctor
+    const doctor = await Doctor.findById(doctorId);
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Doctor not found",
+      });
+    }
+
+    // Check home visit availability
+    if (!doctor.homeVisitAvailable) {
+      return res.status(400).json({
+        success: false,
+        message: "Home visit is not available for this doctor",
+      });
+    }
+
+    // Check subscription
+    if (
+      !["active", "trial", "adminApproved"].includes(doctor.subscriptionStatus)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Doctor is currently unavailable",
+      });
+    }
+
+    // Create Appointment
+    const appointment = await Appointment.create({
+      patientId,
+      doctorId,
+
+      appointmentType: "home",
+
+      homeVisitAddress,
+      homeVisitLandmark,
+      homeVisitCity,
+      homeVisitPincode,
+
+      doctorResponse: "pending",
+
+      amountPaid: doctor.homeVisitFee,
+
+      paymentStatus: "pending",
+
+      status: "pending_payment",
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Home visit appointment created",
       bookingReference: appointment.bookingReference,
       appointment,
     });
@@ -202,4 +277,5 @@ module.exports = {
   getDoctorAppointments,
   markAppointmentChecked,
   createPremiumAppointment,
+  createHomeVisitAppointment,
 };
