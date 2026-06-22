@@ -2,9 +2,26 @@ const Appointment = require("../models/Appointment");
 
 const createNormalAppointment = async (req, res) => {
   try {
-const { doctorId } = req.body;
+    const { doctorId } = req.body;
 
-const patientId = req.user._id;
+    const patientId = req.user._id;
+    // Find doctor
+    const doctor = await Doctor.findById(doctorId);
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Doctor not found",
+      });
+    }
+
+    // Vacation Check
+    if (doctor.vacationMode) {
+      return res.status(400).json({
+        success: false,
+        message: "Doctor is currently on vacation",
+      });
+    }
     const today = new Date();
 
     const startOfDay = new Date(
@@ -52,12 +69,11 @@ const patientId = req.user._id;
 const Doctor = require("../models/Doctor");
 const createPremiumAppointment = async (req, res) => {
   try {
-  
-console.log("Request Body:", req.body);
+    console.log("Request Body:", req.body);
 
-const { doctorId, slotDate, slotTime } = req.body;
+    const { doctorId, slotDate, slotTime } = req.body;
     const patientId = req.user._id;
-console.log("Logged in user:", req.user);
+    console.log("Logged in user:", req.user);
     // 1. Find doctor
     const doctor = await Doctor.findById(doctorId);
 
@@ -65,6 +81,13 @@ console.log("Logged in user:", req.user);
       return res.status(404).json({
         success: false,
         message: "Doctor not found",
+      });
+    }
+    // Vacation Check
+    if (doctor.vacationMode) {
+      return res.status(400).json({
+        success: false,
+        message: "Doctor is currently on vacation",
       });
     }
     if (!doctor.premiumBookingEnabled) {
@@ -86,7 +109,35 @@ console.log("Logged in user:", req.user);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    // Check Working Day
+    const dayName = bookingDate.toLocaleDateString("en-US", {
+      weekday: "long",
+    });
 
+    if (!doctor.workingDays.includes(dayName)) {
+      return res.status(400).json({
+        success: false,
+        message: `Doctor does not work on ${dayName}`,
+      });
+    }
+    // Lunch Break Validation
+    const slotMinutes =
+      Number(slotTime.split(":")[0]) * 60 + Number(slotTime.split(":")[1]);
+
+    const lunchStartMinutes =
+      Number(doctor.lunchStart.split(":")[0]) * 60 +
+      Number(doctor.lunchStart.split(":")[1]);
+
+    const lunchEndMinutes =
+      Number(doctor.lunchEnd.split(":")[0]) * 60 +
+      Number(doctor.lunchEnd.split(":")[1]);
+
+    if (slotMinutes >= lunchStartMinutes && slotMinutes < lunchEndMinutes) {
+      return res.status(400).json({
+        success: false,
+        message: "Doctor is unavailable during lunch break",
+      });
+    }
     if (bookingDate < today) {
       return res.status(400).json({
         success: false,
@@ -104,7 +155,7 @@ console.log("Logged in user:", req.user);
     }
 
     // 3. Check duplicate booking
-    
+
     // Check if this premium slot is already booked
     const existingAppointment = await Appointment.findOne({
       doctorId,
@@ -115,6 +166,22 @@ console.log("Logged in user:", req.user);
         $in: ["booked", "checked", "completed", "rescheduled"],
       },
     });
+    // Check Daily Premium Limit
+    const premiumCount = await Appointment.countDocuments({
+      doctorId,
+      appointmentType: "premium",
+      slotDate: new Date(slotDate),
+      status: {
+        $nin: ["cancelled", "missed"],
+      },
+    });
+
+    if (premiumCount >= doctor.maxPremiumAppointments) {
+      return res.status(400).json({
+        success: false,
+        message: "Maximum premium appointments reached for this day",
+      });
+    } 
 
     console.log("Existing Appointment:", existingAppointment);
 
@@ -171,7 +238,13 @@ const createHomeVisitAppointment = async (req, res) => {
         message: "Doctor not found",
       });
     }
-
+    // Vacation Check
+    if (doctor.vacationMode) {
+      return res.status(400).json({
+        success: false,
+        message: "Doctor is currently on vacation",
+      });
+    }
     // Check home visit availability
     if (!doctor.homeVisitAvailable) {
       return res.status(400).json({
@@ -210,6 +283,31 @@ const createHomeVisitAppointment = async (req, res) => {
 
       status: "pending_payment",
     });
+    // Check Daily Home Visit Limit
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const homeVisitCount = await Appointment.countDocuments({
+      doctorId,
+      appointmentType: "home",
+      appointmentDate: {
+        $gte: today,
+        $lt: tomorrow,
+      },
+      status: {
+        $nin: ["cancelled", "missed"],
+      },
+    });
+
+    if (homeVisitCount >= doctor.maxHomeVisits) {
+      return res.status(400).json({
+        success: false,
+        message: "Maximum home visits reached for today",
+      });
+    }
 
     res.status(201).json({
       success: true,

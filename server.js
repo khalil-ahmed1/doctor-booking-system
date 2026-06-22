@@ -15,6 +15,7 @@ const appointmentRoutes = require("./routes/appointmentRoutes");
 const patientRoutes = require("./routes/patientRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const pdfRoutes = require("./routes/pdfRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 // Connect Database
 connectDB();
@@ -38,6 +39,7 @@ app.use("/api/patients", patientRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/pdf", pdfRoutes);
+app.use("/api/admin", adminRoutes);
 // Start Server
 const PORT = process.env.PORT || 5000;
 

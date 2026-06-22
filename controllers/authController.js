@@ -53,7 +53,12 @@ console.log("User found:", user);
       });
     }
 
+    console.log("Entered Password:", password);
+    console.log("Stored Hash:", user.password);
+
     const isMatch = await bcrypt.compare(password, user.password);
+
+    console.log("Password Match:", isMatch);
 
     if (!isMatch) {
       return res.status(400).json({

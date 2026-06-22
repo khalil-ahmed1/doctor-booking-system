@@ -78,7 +78,73 @@ const doctorSchema = new mongoose.Schema(
 
     subscriptionStatus: {
       type: String,
+      enum: ["inactive", "trial", "active", "expired", "suspended"],
       default: "inactive",
+    },
+
+    subscriptionPlan: {
+      type: String,
+      enum: ["none", "trial", "monthly", "quarterly", "yearly"],
+      default: "none",
+    },
+
+    subscriptionStartDate: {
+      type: Date,
+    },
+
+    subscriptionExpiryDate: {
+      type: Date,
+    },
+
+    subscriptionAmount: {
+      type: Number,
+      default: 0,
+    },
+    // Doctor Availability
+
+    workingDays: {
+      type: [String],
+      default: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+    },
+
+    clinicStartTime: {
+      type: String,
+      default: "09:00",
+    },
+
+    clinicEndTime: {
+      type: String,
+      default: "18:00",
+    },
+
+    lunchStart: {
+      type: String,
+      default: "13:00",
+    },
+
+    lunchEnd: {
+      type: String,
+      default: "14:00",
+    },
+
+    maxNormalAppointments: {
+      type: Number,
+      default: 50,
+    },
+
+    maxPremiumAppointments: {
+      type: Number,
+      default: 20,
+    },
+
+    maxHomeVisits: {
+      type: Number,
+      default: 5,
+    },
+
+    vacationMode: {
+      type: Boolean,
+      default: false,
     },
   },
   {

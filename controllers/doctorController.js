@@ -321,6 +321,7 @@ const getPremiumSlots = async (req, res) => {
 };
 const getMyDashboard = async (req, res) => {
   try {
+    // Find doctor profile
     const doctor = await Doctor.findOne({
       userId: req.user._id,
     });
@@ -332,6 +333,7 @@ const getMyDashboard = async (req, res) => {
       });
     }
 
+    // Today's Date
     const today = new Date();
 
     const startOfDay = new Date(
@@ -346,6 +348,7 @@ const getMyDashboard = async (req, res) => {
       today.getDate() + 1,
     );
 
+    // Today's Appointments
     const appointments = await Appointment.find({
       doctorId: doctor._id,
       appointmentDate: {
@@ -354,10 +357,82 @@ const getMyDashboard = async (req, res) => {
       },
     }).populate("patientId", "name mobile");
 
+    // Appointment Categories
+    const normalAppointments = appointments
+      .filter((a) => a.appointmentType === "normal")
+      .sort((a, b) => a.tokenNumber - b.tokenNumber);
+
+    const premiumAppointments = appointments
+      .filter((a) => a.appointmentType === "premium")
+      .sort((a, b) => (a.slotTime || "").localeCompare(b.slotTime || ""));
+
+    const homeAppointments = appointments.filter(
+      (a) => a.appointmentType === "home",
+    );
+
+    // Dashboard Statistics
+    const confirmed = appointments.filter(
+      (a) => a.status === "confirmed",
+    ).length;
+
+    const checked = appointments.filter((a) => a.status === "checked").length;
+
+    const completed = appointments.filter(
+      (a) => a.status === "completed",
+    ).length;
+
+    const pendingPayment = appointments.filter(
+      (a) => a.status === "pending_payment",
+    ).length;
+
+    const cancelled = appointments.filter(
+      (a) => a.status === "cancelled",
+    ).length;
+
+    const missed = appointments.filter((a) => a.status === "missed").length;
+
+    const totalRevenue = appointments
+      .filter((a) => a.paymentStatus === "paid")
+      .reduce((sum, a) => sum + a.amountPaid, 0);
+
+    const premiumCount = premiumAppointments.length;
+    const normalCount = normalAppointments.length;
+    const homeCount = homeAppointments.length;
+
     res.status(200).json({
       success: true,
+
       doctor,
-      appointments,
+
+      statistics: {
+        total: appointments.length,
+
+        confirmed,
+
+        checked,
+
+        completed,
+
+        pendingPayment,
+
+        cancelled,
+
+        missed,
+
+        totalRevenue,
+
+        premiumCount,
+
+        normalCount,
+
+        homeCount,
+      },
+
+      normalAppointments,
+
+      premiumAppointments,
+
+      homeAppointments,
     });
   } catch (error) {
     res.status(500).json({
@@ -366,7 +441,197 @@ const getMyDashboard = async (req, res) => {
     });
   }
 };
+const getDoctorEarnings = async (req, res) => {
+  try {
+    const doctor = await Doctor.findOne({
+      userId: req.user._id,
+    });
 
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Doctor profile not found",
+      });
+    }
+
+    const appointments = await Appointment.find({
+      doctorId: doctor._id,
+      paymentStatus: "paid",
+    });
+
+    const now = new Date();
+
+    // Today
+    const startToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+
+    // Week
+    const startWeek = new Date(startToday);
+    startWeek.setDate(startToday.getDate() - startToday.getDay());
+
+    // Month
+    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let today = 0;
+    let thisWeek = 0;
+    let thisMonth = 0;
+    let total = 0;
+
+    appointments.forEach((appointment) => {
+      const amount = appointment.amountPaid;
+      const date = appointment.paymentCompletedAt || appointment.updatedAt;
+
+      total += amount;
+
+      if (date >= startToday) {
+        today += amount;
+      }
+
+      if (date >= startWeek) {
+        thisWeek += amount;
+      }
+
+      if (date >= startMonth) {
+        thisMonth += amount;
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      earnings: {
+        today,
+        thisWeek,
+        thisMonth,
+        total,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const getDoctorAnalytics = async (req, res) => {
+  try {
+    const doctor = await Doctor.findOne({
+      userId: req.user._id,
+    });
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Doctor profile not found",
+      });
+    }
+
+    const appointments = await Appointment.find({
+      doctorId: doctor._id,
+    });
+
+    const analytics = {
+      totalAppointments: appointments.length,
+
+      normalAppointments: appointments.filter(
+        (a) => a.appointmentType === "normal",
+      ).length,
+
+      premiumAppointments: appointments.filter(
+        (a) => a.appointmentType === "premium",
+      ).length,
+
+      homeVisitAppointments: appointments.filter(
+        (a) => a.appointmentType === "home",
+      ).length,
+
+      confirmedAppointments: appointments.filter(
+        (a) => a.status === "confirmed",
+      ).length,
+
+      checkedAppointments: appointments.filter((a) => a.status === "checked")
+        .length,
+
+      completedAppointments: appointments.filter(
+        (a) => a.status === "completed",
+      ).length,
+
+      cancelledAppointments: appointments.filter(
+        (a) => a.status === "cancelled",
+      ).length,
+
+      missedAppointments: appointments.filter((a) => a.status === "missed")
+        .length,
+
+      pendingPaymentAppointments: appointments.filter(
+        (a) => a.status === "pending_payment",
+      ).length,
+    };
+
+    res.status(200).json({
+      success: true,
+      analytics,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const updateAvailability = async (req, res) => {
+  try {
+    const doctor = await Doctor.findOne({
+      userId: req.user._id,
+    });
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Doctor not found",
+      });
+    }
+
+    const {
+      workingDays,
+      clinicStartTime,
+      clinicEndTime,
+      lunchStart,
+      lunchEnd,
+      maxNormalAppointments,
+      maxPremiumAppointments,
+      maxHomeVisits,
+      vacationMode,
+    } = req.body;
+
+    doctor.workingDays = workingDays;
+    doctor.clinicStartTime = clinicStartTime;
+    doctor.clinicEndTime = clinicEndTime;
+    doctor.lunchStart = lunchStart;
+    doctor.lunchEnd = lunchEnd;
+
+    doctor.maxNormalAppointments = maxNormalAppointments;
+    doctor.maxPremiumAppointments = maxPremiumAppointments;
+    doctor.maxHomeVisits = maxHomeVisits;
+
+    doctor.vacationMode = vacationMode;
+
+    await doctor.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Availability updated successfully",
+      doctor,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 const updateHomeVisitStatus = async (req, res) => {
   try {
     const { appointmentId } = req.params;
@@ -430,4 +695,7 @@ module.exports = {
   getDoctorDashboard,
   getMyDashboard,
   updateHomeVisitStatus,
+  getDoctorEarnings,
+  getDoctorAnalytics,
+  updateAvailability,
 };

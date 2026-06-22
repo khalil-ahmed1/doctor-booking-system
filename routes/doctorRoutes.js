@@ -10,6 +10,9 @@ const {
   getDoctorDashboard,
   getMyDashboard,
   updateHomeVisitStatus,
+  getDoctorEarnings,
+  getDoctorAnalytics,
+    updateAvailability,
 } = require("../controllers/doctorController");
 
 router.post("/register", registerDoctor);
@@ -24,6 +27,9 @@ router.put(
 );
 
 // General routes
+router.get("/analytics", protect, doctorOnly, getDoctorAnalytics);
+router.get("/earnings", protect, doctorOnly, getDoctorEarnings);
+router.put("/availability", protect, doctorOnly, updateAvailability);
 router.get("/", getAllDoctors);
 
 // Dynamic routes
@@ -34,5 +40,6 @@ router.put("/:id/premium-schedule", updatePremiumSchedule);
 router.get("/:id/premium-slots", getPremiumSlots);
 
 router.get("/:id/dashboard", protect, doctorOnly, getDoctorDashboard);
+
 
 module.exports = router;
