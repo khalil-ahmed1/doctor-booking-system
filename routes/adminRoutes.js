@@ -9,11 +9,14 @@ const {
   getPendingDoctors,
     approveDoctor,
     suspendDoctor,
+    activateSubscription,
+    checkExpiredSubscriptions,
 } = require("../controllers/adminController");
 
 router.get("/dashboard", protect, adminOnly, getAdminDashboard);
 router.get("/pending-doctors", protect, adminOnly, getPendingDoctors);
 router.put("/approve/:id", protect, adminOnly, approveDoctor);
 router.put("/suspend/:id", protect, adminOnly, suspendDoctor);
-
+router.post("/activate-subscription", protect, adminOnly, activateSubscription);
+router.put("/check-expiry", protect, adminOnly, checkExpiredSubscriptions);
 module.exports = router;
