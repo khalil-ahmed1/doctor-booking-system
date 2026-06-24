@@ -686,6 +686,62 @@ const updateHomeVisitStatus = async (req, res) => {
     });
   }
 };
+const searchDoctors = async (req, res) => {
+  try {
+    const { specialization, clinic, homeVisit, premium, minFee, maxFee } =
+      req.query;
+
+    let filter = {
+      subscriptionStatus: {
+        $in: ["active", "trial", "adminApproved"],
+      },
+      vacationMode: false,
+    };
+
+    if (specialization) {
+      filter.specialization = {
+        $regex: specialization,
+        $options: "i",
+      };
+    }
+
+    if (clinic) {
+      filter.clinicName = {
+        $regex: clinic,
+        $options: "i",
+      };
+    }
+
+    if (homeVisit === "true") {
+      filter.homeVisitAvailable = true;
+    }
+
+    if (premium === "true") {
+      filter.premiumBookingEnabled = true;
+    }
+
+    if (minFee || maxFee) {
+      filter.consultationFee = {};
+
+      if (minFee) filter.consultationFee.$gte = Number(minFee);
+
+      if (maxFee) filter.consultationFee.$lte = Number(maxFee);
+    }
+
+    const doctors = await Doctor.find(filter).select("-__v");
+
+    res.status(200).json({
+      success: true,
+      count: doctors.length,
+      doctors,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 module.exports = {
   registerDoctor,
   getAllDoctors,
@@ -698,4 +754,5 @@ module.exports = {
   getDoctorEarnings,
   getDoctorAnalytics,
   updateAvailability,
+  searchDoctors,
 };

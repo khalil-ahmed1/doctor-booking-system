@@ -224,6 +224,223 @@ const checkExpiredSubscriptions = async (req, res) => {
   }
 };
 
+const getAllPatients = async (req, res) => {
+  try {
+    const patients = await User.find({ role: "patient" })
+      .select("-password")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: patients.length,
+      patients,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const searchPatients = async (req, res) => {
+  try {
+    const { keyword } = req.query;
+
+    const patients = await User.find({
+      role: "patient",
+      $or: [
+        { name: { $regex: keyword || "", $options: "i" } },
+        { mobile: { $regex: keyword || "", $options: "i" } },
+        { email: { $regex: keyword || "", $options: "i" } },
+      ],
+    }).select("-password");
+
+    res.status(200).json({
+      success: true,
+      count: patients.length,
+      patients,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const getPatientDetails = async (req, res) => {
+  try {
+    const patient = await User.findById(req.params.id).select("-password");
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found",
+      });
+    }
+
+    const appointments = await Appointment.find({
+      patientId: patient._id,
+    })
+      .populate(
+        "doctorId",
+        "name specialization clinicName consultationFee premiumFee",
+      )
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      patient,
+      totalAppointments: appointments.length,
+      appointments,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const getAllDoctors = async (req, res) => {
+  try {
+    const doctors = await Doctor.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: doctors.length,
+      doctors,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const searchDoctors = async (req, res) => {
+  try {
+    const { keyword } = req.query;
+
+    const doctors = await Doctor.find({
+      $or: [
+        { name: { $regex: keyword || "", $options: "i" } },
+        { specialization: { $regex: keyword || "", $options: "i" } },
+        { clinicName: { $regex: keyword || "", $options: "i" } },
+      ],
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: doctors.length,
+      doctors,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const getRevenueReport = async (req, res) => {
+  try {
+    const totalRevenue = await Appointment.aggregate([
+      {
+        $match: {
+          paymentStatus: "paid",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          revenue: {
+            $sum: "$amountPaid",
+          },
+        },
+      },
+    ]);
+
+    const paidAppointments = await Appointment.countDocuments({
+      paymentStatus: "paid",
+    });
+
+    const pendingPayments = await Appointment.countDocuments({
+      paymentStatus: "pending",
+    });
+
+    const refundPending = await Appointment.countDocuments({
+      paymentStatus: "refund_pending",
+    });
+
+    res.status(200).json({
+      success: true,
+
+      revenue: totalRevenue.length ? totalRevenue[0].revenue : 0,
+
+      paidAppointments,
+
+      pendingPayments,
+
+      refundPending,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const getAllAppointments = async (req, res) => {
+  try {
+    const appointments = await Appointment.find()
+      .populate("patientId", "name mobile email")
+      .populate("doctorId", "name specialization clinicName")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: appointments.length,
+      appointments,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const approveRefund = async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    if (appointment.paymentStatus !== "refund_pending") {
+      return res.status(400).json({
+        success: false,
+        message: "No refund pending",
+      });
+    }
+
+    appointment.paymentStatus = "refunded";
+
+    await appointment.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Refund approved successfully",
+      appointment,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 module.exports = {
   getAdminDashboard,
     getPendingDoctors,
@@ -231,4 +448,12 @@ module.exports = {
     suspendDoctor,
     activateSubscription,
     checkExpiredSubscriptions,
+    getAllPatients,
+    searchPatients,
+    getPatientDetails,
+    getAllDoctors,
+    searchDoctors,
+    getRevenueReport,
+    getAllAppointments,
+    approveRefund,
 };

@@ -48,7 +48,8 @@ const appointmentSchema = new mongoose.Schema(
         "confirmed",
         "checked",
         "completed",
-        "cancelled",
+        "cancelled_by_patient",
+        "cancelled_by_doctor",
         "missed",
         "rescheduled",
       ],
@@ -58,7 +59,7 @@ const appointmentSchema = new mongoose.Schema(
     // Payment
     paymentStatus: {
       type: String,
-      enum: ["pending", "paid", "failed", "refunded"],
+      enum: ["pending", "paid", "failed", "refund_pending", "refunded"],
       default: "pending",
     },
 
@@ -90,7 +91,20 @@ const appointmentSchema = new mongoose.Schema(
     paymentCompletedAt: {
       type: Date,
     },
+    cancelReason: {
+      type: String,
+      default: "",
+    },
 
+    cancelledAt: {
+      type: Date,
+    },
+
+    cancelledBy: {
+      type: String,
+      enum: ["patient", "doctor", "admin", ""],
+      default: "",
+    },
     expiresAt: {
       type: Date,
     },
@@ -107,7 +121,21 @@ const appointmentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Email Reminder Flags
+    reminder24Sent: {
+      type: Boolean,
+      default: false,
+    },
 
+    reminder2Sent: {
+      type: Boolean,
+      default: false,
+    },
+
+    reminder30Sent: {
+      type: Boolean,
+      default: false,
+    },
     // ===========================
     // HOME VISIT DETAILS
     // ===========================

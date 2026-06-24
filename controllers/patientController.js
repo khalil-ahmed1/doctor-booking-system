@@ -1,4 +1,5 @@
 const Appointment = require("../models/Appointment");
+const Doctor = require("../models/Doctor");
 
 const getPatientDashboard = async (req, res) => {
   try {
@@ -9,21 +10,30 @@ const getPatientDashboard = async (req, res) => {
     })
       .populate(
         "doctorId",
-        "name specialization clinicName consultationFee premiumFee",
+        "name specialization clinicName consultationFee premiumFee homeVisitFee",
       )
       .sort({
         appointmentDate: -1,
       });
 
-    const upcoming = appointments.filter(
-      (a) => a.status === "booked" || a.status === "rescheduled",
+    // Upcoming Appointments
+    const upcoming = appointments.filter((a) =>
+      ["pending_payment", "confirmed", "booked", "rescheduled"].includes(
+        a.status,
+      ),
     );
 
-    const completed = appointments.filter(
-      (a) => a.status === "checked" || a.status === "completed",
+    // Completed Appointments
+    const completed = appointments.filter((a) =>
+      ["checked", "completed"].includes(a.status),
     );
 
-    const cancelled = appointments.filter((a) => a.status === "cancelled");
+    // Cancelled Appointments
+    const cancelled = appointments.filter((a) =>
+      ["cancelled", "cancelled_by_patient", "cancelled_by_doctor"].includes(
+        a.status,
+      ),
+    );
 
     res.status(200).json({
       success: true,
@@ -47,7 +57,6 @@ const getPatientDashboard = async (req, res) => {
   }
 };
 
-
 const cancelAppointment = async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id);
@@ -59,7 +68,6 @@ const cancelAppointment = async (req, res) => {
       });
     }
 
-    // Only the patient who booked it can cancel
     if (appointment.patientId.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -67,15 +75,18 @@ const cancelAppointment = async (req, res) => {
       });
     }
 
-    // Only booked appointments can be cancelled
-    if (appointment.status !== "booked") {
+    if (
+      appointment.status === "cancelled_by_patient" ||
+      appointment.status === "cancelled_by_doctor"
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Only booked appointments can be cancelled",
+        message: "Appointment already cancelled",
       });
     }
 
-    appointment.status = "cancelled";
+    appointment.status = "cancelled_by_patient";
+    appointment.cancelledAt = new Date();
 
     await appointment.save();
 
@@ -91,7 +102,36 @@ const cancelAppointment = async (req, res) => {
     });
   }
 };
+
+const getMyAppointments = async (req, res) => {
+  try {
+    const appointments = await Appointment.find({
+      patientId: req.user._id,
+    })
+      .populate({
+        path: "doctorId",
+        select:
+          "name specialization clinicName consultationFee premiumFee homeVisitFee",
+      })
+      .sort({
+        createdAt: -1,
+      });
+
+    res.status(200).json({
+      success: true,
+      count: appointments.length,
+      appointments,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   getPatientDashboard,
   cancelAppointment,
+  getMyAppointments,
 };

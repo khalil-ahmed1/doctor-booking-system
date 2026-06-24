@@ -8,6 +8,7 @@ const {
   createHomeVisitAppointment,
   getDoctorAppointments,
   markAppointmentChecked,
+  cancelAppointment,
 } = require("../controllers/appointmentController");
 
 const { protect, patientOnly } = require("../middleware/authMiddleware");
@@ -18,6 +19,7 @@ router.get("/test", (req, res) => {
 });
 
 // Patient Booking Routes
+
 router.post("/normal", protect, patientOnly, createNormalAppointment);
 
 router.post("/premium", protect, patientOnly, createPremiumAppointment);
@@ -28,5 +30,6 @@ router.post("/home", protect, patientOnly, createHomeVisitAppointment);
 router.get("/doctor/:doctorId", protect, getDoctorAppointments);
 
 router.put("/:id/check", protect, markAppointmentChecked);
+router.put("/:id/cancel", protect, patientOnly, cancelAppointment);
 
 module.exports = router;

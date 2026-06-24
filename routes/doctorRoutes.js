@@ -13,6 +13,7 @@ const {
   getDoctorEarnings,
   getDoctorAnalytics,
     updateAvailability,
+    searchDoctors,
 } = require("../controllers/doctorController");
 
 router.post("/register", registerDoctor);
@@ -33,6 +34,7 @@ router.put("/availability", protect, doctorOnly, updateAvailability);
 router.get("/", getAllDoctors);
 
 // Dynamic routes
+router.get("/search", searchDoctors);
 router.get("/:id", getDoctorById);
 
 router.put("/:id/premium-schedule", updatePremiumSchedule);

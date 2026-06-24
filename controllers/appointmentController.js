@@ -1,5 +1,6 @@
 const Appointment = require("../models/Appointment");
-
+const sendNotification = require("../services/notificationService");
+const { sendEmail, sendAppointmentEmail } = require("../services/emailService");const User = require("../models/User");
 const createNormalAppointment = async (req, res) => {
   try {
     const { doctorId } = req.body;
@@ -52,6 +53,7 @@ const createNormalAppointment = async (req, res) => {
       tokenNumber: nextToken,
       appointmentDate: today,
     });
+    
 
     res.status(201).json({
       success: true,
@@ -181,7 +183,7 @@ const createPremiumAppointment = async (req, res) => {
         success: false,
         message: "Maximum premium appointments reached for this day",
       });
-    } 
+    }
 
     console.log("Existing Appointment:", existingAppointment);
 
@@ -203,7 +205,28 @@ const createPremiumAppointment = async (req, res) => {
       amountPaid: doctor.premiumFee,
       status: "pending_payment",
     });
+    // Send notification to doctor
+    const doctorUser = await Doctor.findById(doctorId);
 
+    await sendNotification(
+      doctorUser.userId,
+      "New Premium Appointment",
+      `You have received a new premium appointment for ${slotDate} at ${slotTime}.`,
+      "appointment",
+    );
+    // Send email to patient
+
+    const patient = await User.findById(patientId);
+
+   await sendAppointmentEmail(
+     patient.email,
+     "Appointment Confirmation",
+     patient.name,
+     doctor.name,
+     appointment.bookingReference,
+     slotDate,
+     slotTime,
+   );
     res.status(201).json({
       success: true,
       message: "Premium appointment booked successfully",
@@ -217,7 +240,7 @@ const createPremiumAppointment = async (req, res) => {
     });
   }
 };
-const createHomeVisitAppointment = async (req, res) => {
+ const createHomeVisitAppointment = async (req, res) => {
   try {
     const {
       doctorId,
@@ -238,6 +261,7 @@ const createHomeVisitAppointment = async (req, res) => {
         message: "Doctor not found",
       });
     }
+
     // Vacation Check
     if (doctor.vacationMode) {
       return res.status(400).json({
@@ -245,7 +269,8 @@ const createHomeVisitAppointment = async (req, res) => {
         message: "Doctor is currently on vacation",
       });
     }
-    // Check home visit availability
+
+    // Home Visit Availability
     if (!doctor.homeVisitAvailable) {
       return res.status(400).json({
         success: false,
@@ -253,9 +278,11 @@ const createHomeVisitAppointment = async (req, res) => {
       });
     }
 
-    // Check subscription
+    // Subscription Check
     if (
-      !["active", "trial", "adminApproved"].includes(doctor.subscriptionStatus)
+      !["active", "trial", "adminApproved"].includes(
+        doctor.subscriptionStatus
+      )
     ) {
       return res.status(400).json({
         success: false,
@@ -263,26 +290,6 @@ const createHomeVisitAppointment = async (req, res) => {
       });
     }
 
-    // Create Appointment
-    const appointment = await Appointment.create({
-      patientId,
-      doctorId,
-
-      appointmentType: "home",
-
-      homeVisitAddress,
-      homeVisitLandmark,
-      homeVisitCity,
-      homeVisitPincode,
-
-      doctorResponse: "pending",
-
-      amountPaid: doctor.homeVisitFee,
-
-      paymentStatus: "pending",
-
-      status: "pending_payment",
-    });
     // Check Daily Home Visit Limit
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -308,6 +315,35 @@ const createHomeVisitAppointment = async (req, res) => {
         message: "Maximum home visits reached for today",
       });
     }
+
+    // Create Appointment
+    const appointment = await Appointment.create({
+      patientId,
+      doctorId,
+
+      appointmentType: "home",
+
+      homeVisitAddress,
+      homeVisitLandmark,
+      homeVisitCity,
+      homeVisitPincode,
+
+      doctorResponse: "pending",
+
+      amountPaid: doctor.homeVisitFee,
+
+      paymentStatus: "pending",
+
+      status: "pending_payment",
+    });
+
+    // Notify Doctor
+   await sendNotification(
+     doctor.userId,
+     "New Home Visit Request",
+     `A patient has requested a home visit in ${homeVisitCity}.`,
+     "homeVisit",
+   );
 
     res.status(201).json({
       success: true,
@@ -370,10 +406,126 @@ const markAppointmentChecked = async (req, res) => {
     });
   }
 };
+const cancelAppointment = async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    const appointment = await Appointment.findById(req.params.id);
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    // Already cancelled
+    if (
+      appointment.status === "cancelled_by_patient" ||
+      appointment.status === "cancelled_by_doctor"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Appointment already cancelled",
+      });
+    }
+
+    // Only booking patient can cancel
+    if (appointment.patientId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
+    }
+
+    // Patient
+    const patient = await User.findById(appointment.patientId);
+
+    // Doctor Profile
+    const doctor = await Doctor.findById(appointment.doctorId);
+
+    if (!patient || !doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient or Doctor not found",
+      });
+    }
+
+    // Doctor Login Account
+    const doctorUser = await User.findById(doctor.userId);
+
+    // Update Appointment
+    appointment.status = "cancelled_by_patient";
+    appointment.cancelReason = reason || "";
+    appointment.cancelledBy = "patient";
+    appointment.cancelledAt = new Date();
+
+    if (appointment.paymentStatus === "paid") {
+      appointment.paymentStatus = "refund_pending";
+    }
+
+    await appointment.save();
+
+    // Send Notification
+    if (doctorUser) {
+      await sendNotification(
+        doctorUser._id,
+        "Appointment Cancelled",
+        `${patient.name} cancelled the appointment scheduled on ${appointment.slotDate.toDateString()} at ${appointment.slotTime}.`,
+        "appointment",
+      );
+    }
+
+    // Email Patient
+    if (patient.email) {
+      await sendEmail({
+        to: patient.email,
+        subject: "Appointment Cancelled",
+        html: cancellationEmail(
+          patient.name,
+          doctor.name,
+          appointment.slotDate.toDateString(),
+          appointment.slotTime,
+          appointment.bookingReference,
+        ),
+      });
+    }
+
+    // Email Doctor
+    if (doctorUser && doctorUser.email) {
+      await sendEmail({
+        to: doctorUser.email,
+        subject: "Patient Cancelled Appointment",
+        html: doctorCancellationEmail(
+          doctor.name,
+          patient.name,
+          appointment.slotDate.toDateString(),
+          appointment.slotTime,
+          appointment.bookingReference,
+        ),
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Appointment cancelled successfully",
+      appointment,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   createNormalAppointment,
   getDoctorAppointments,
   markAppointmentChecked,
   createPremiumAppointment,
   createHomeVisitAppointment,
+  cancelAppointment,
 };
