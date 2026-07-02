@@ -18,10 +18,12 @@ const {
     searchDoctors,
     getRevenueReport,
     getAllAppointments,
-    approveRefund
+    approveRefund,
+    createDoctorByAdmin,
 } = require("../controllers/adminController");
 
 router.get("/dashboard", protect, adminOnly, getAdminDashboard);
+router.post("/create-doctor", protect, adminOnly, createDoctorByAdmin);
 router.get("/pending-doctors", protect, adminOnly, getPendingDoctors);
 router.put("/approve/:id", protect, adminOnly, approveDoctor);
 router.put("/suspend/:id", protect, adminOnly, suspendDoctor);

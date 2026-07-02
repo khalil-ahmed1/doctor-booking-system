@@ -1,4 +1,5 @@
 const Doctor = require("../models/Doctor");
+const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const Appointment = require("../models/Appointment");
 
@@ -108,6 +109,18 @@ const suspendDoctor = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Doctor not found",
+      });
+    }
+
+    if (doctor.subscriptionStatus === "suspended") {
+      doctor.subscriptionStatus = "active";
+
+      await doctor.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Doctor activated successfully",
+        doctor,
       });
     }
 
@@ -441,6 +454,96 @@ const approveRefund = async (req, res) => {
     });
   }
 };
+const createDoctorByAdmin = async (req, res) => {
+  try {
+    const {
+      name,
+      mobile,
+      email,
+      password,
+      specialization,
+      qualification,
+      experience,
+      clinicName,
+      clinicAddress,
+      consultationFee,
+      premiumFee,
+      homeVisitFee,
+    } = req.body;
+
+    // Check existing email
+    const existingEmail = await User.findOne({ email });
+
+    if (existingEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already registered",
+      });
+    }
+
+    // Check existing mobile
+    const existingMobile = await User.findOne({ mobile });
+
+    if (existingMobile) {
+      return res.status(400).json({
+        success: false,
+        message: "Mobile number already registered",
+      });
+    }
+
+    // Hash Password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create User
+    const user = await User.create({
+      name,
+      mobile,
+      email,
+      password: hashedPassword,
+      role: "doctor",
+    });
+
+    // Trial Dates
+    const startDate = new Date();
+
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 7);
+
+    // Create Doctor Profile
+    const doctor = await Doctor.create({
+      userId: user._id,
+      name,
+      specialization,
+      qualification,
+      experience,
+      clinicName,
+      clinicAddress,
+      consultationFee,
+      premiumFee,
+      homeVisitFee,
+
+      // Free Trial
+      subscriptionStatus: "trial",
+      subscriptionPlan: "trial",
+      subscriptionStartDate: startDate,
+      subscriptionExpiryDate: expiryDate,
+      subscriptionAmount: 0,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Doctor created successfully. 7-day trial activated.",
+      doctor,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 module.exports = {
   getAdminDashboard,
     getPendingDoctors,
@@ -456,4 +559,5 @@ module.exports = {
     getRevenueReport,
     getAllAppointments,
     approveRefund,
+    createDoctorByAdmin,
 };

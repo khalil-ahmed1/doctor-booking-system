@@ -2,6 +2,8 @@ const Doctor = require("../models/Doctor");
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const Appointment = require("../models/Appointment");
+const checkDoctorSubscription = require("../utils/checkDoctorSubscription");
+
 const registerDoctor = async (req, res) => {
   console.log("REGISTER DOCTOR API HIT");
   try {
@@ -87,7 +89,12 @@ const getDoctorById = async (req, res) => {
   console.log("GET DOCTOR BY ID API HIT");
   console.log("Doctor ID:", req.params.id);
   try {
-    const doctor = await Doctor.findById(req.params.id);
+   const doctor = await Doctor.findOne({
+     _id: req.params.id,
+     subscriptionStatus: {
+       $in: ["trial", "active"],
+     },
+   });
 
     if (!doctor) {
       return res.status(404).json({
@@ -107,6 +114,8 @@ const getDoctorById = async (req, res) => {
     });
   }
 };
+
+
 const updatePremiumSchedule = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
@@ -138,6 +147,7 @@ const updatePremiumSchedule = async (req, res) => {
     });
   }
 };
+
 const getPremiumSlots = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
@@ -153,7 +163,141 @@ const getPremiumSlots = async (req, res) => {
 
     const start = doctor.premiumStartTime;
     const end = doctor.premiumEndTime;
-    const duration = doctor.slotDuration;
+    const duration = doctor.premiumSlotDuration;
+
+    let [startHour, startMinute] = start.split(":").map(Number);
+
+    let [endHour, endMinute] = end.split(":").map(Number);
+
+    let currentMinutes = startHour * 60 + startMinute;
+
+    const endMinutes = endHour * 60 + endMinute;
+
+while (currentMinutes < endMinutes) {
+  const slotMinutes = currentMinutes;
+
+  const lunchStart =
+    Number(doctor.lunchStart.split(":")[0]) * 60 +
+    Number(doctor.lunchStart.split(":")[1]);
+
+  const lunchEnd =
+    Number(doctor.lunchEnd.split(":")[0]) * 60 +
+    Number(doctor.lunchEnd.split(":")[1]);
+
+  // Skip lunch slots
+  if (slotMinutes >= lunchStart && slotMinutes < lunchEnd) {
+    currentMinutes += duration;
+    continue;
+  }
+
+  const hours = Math.floor(currentMinutes / 60);
+  const minutes = currentMinutes % 60;
+
+  const slot = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+    2,
+    "0",
+  )}`;
+
+  slots.push(slot);
+
+  currentMinutes += duration;
+}
+    // Get booking date from query
+    const selectedDate = req.query.date;
+    const bookingDate = new Date(selectedDate);
+
+    const dayName = bookingDate.toLocaleDateString("en-US", {
+      weekday: "long",
+    });
+
+    if (!doctor.premiumWorkingDays.includes(dayName)) {
+      return res.status(400).json({
+        success: false,
+        message: `Doctor does not provide Premium Consultation on ${dayName}`,
+      });
+    }
+
+    let bookedSlots = [];
+
+    if (selectedDate) {
+      const appointments = await Appointment.find({
+        doctorId: doctor._id,
+        appointmentType: "premium",
+        slotDate: new Date(selectedDate),
+        status: {
+          $in: ["confirmed", "checked", "completed", "pending_payment"],
+        },
+      });
+
+      bookedSlots = appointments.map((a) => a.slotTime);
+    }
+
+    // Remove booked slots
+    const availableSlots = slots.filter((slot) => !bookedSlots.includes(slot));
+
+    res.status(200).json({
+      success: true,
+      date: selectedDate,
+      totalSlots: slots.length,
+      bookedSlots,
+      availableSlots,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const getHomeVisitSlots = async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id);
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Doctor not found",
+      });
+    }
+
+    // Home Visit Enabled
+    if (!doctor.homeVisitAvailable) {
+      return res.status(400).json({
+        success: false,
+        message: "Home Visit is disabled",
+      });
+    }
+
+    const selectedDate = req.query.date;
+
+    if (!selectedDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Date is required",
+      });
+    }
+
+    // Check Working Day
+    const bookingDate = new Date(selectedDate);
+
+    const dayName = bookingDate.toLocaleDateString("en-US", {
+      weekday: "long",
+    });
+
+    if (!doctor.homeVisitWorkingDays.includes(dayName)) {
+      return res.status(400).json({
+        success: false,
+        message: `Doctor does not provide Home Visits on ${dayName}`,
+      });
+    }
+
+    const slots = [];
+
+    const start = doctor.homeVisitStartTime;
+
+    const end = doctor.homeVisitEndTime;
+
+    const duration = doctor.homeVisitSlotDuration;
 
     let [startHour, startMinute] = start.split(":").map(Number);
 
@@ -164,6 +308,22 @@ const getPremiumSlots = async (req, res) => {
     const endMinutes = endHour * 60 + endMinute;
 
     while (currentMinutes < endMinutes) {
+      const slotMinutes = currentMinutes;
+
+      // Skip Lunch Break
+      const lunchStart =
+        Number(doctor.lunchStart.split(":")[0]) * 60 +
+        Number(doctor.lunchStart.split(":")[1]);
+
+      const lunchEnd =
+        Number(doctor.lunchEnd.split(":")[0]) * 60 +
+        Number(doctor.lunchEnd.split(":")[1]);
+
+      if (slotMinutes >= lunchStart && slotMinutes < lunchEnd) {
+        currentMinutes += duration;
+        continue;
+      }
+
       const hours = Math.floor(currentMinutes / 60);
 
       const minutes = currentMinutes % 60;
@@ -177,25 +337,18 @@ const getPremiumSlots = async (req, res) => {
       currentMinutes += duration;
     }
 
-    // Get booking date from query
-    const selectedDate = req.query.date;
+    // Already booked Home Visit slots
+    const appointments = await Appointment.find({
+      doctorId: doctor._id,
+      appointmentType: "home",
+      slotDate: new Date(selectedDate),
+      status: {
+        $in: ["confirmed", "checked", "completed", "pending_payment"],
+      },
+    });
 
-    let bookedSlots = [];
+    const bookedSlots = appointments.map((a) => a.slotTime);
 
-    if (selectedDate) {
-      const appointments = await Appointment.find({
-        doctorId: doctor._id,
-        appointmentType: "premium",
-        slotDate: new Date(selectedDate),
-        status: {
-          $in: ["booked", "checked", "completed", "rescheduled"],
-        },
-      });
-
-      bookedSlots = appointments.map((a) => a.slotTime);
-    }
-
-    // Remove booked slots
     const availableSlots = slots.filter((slot) => !bookedSlots.includes(slot));
 
     res.status(200).json({
@@ -326,6 +479,8 @@ const getMyDashboard = async (req, res) => {
       userId: req.user._id,
     });
 
+    await checkDoctorSubscription(doctor);
+
     if (!doctor) {
       return res.status(404).json({
         success: false,
@@ -441,11 +596,70 @@ const getMyDashboard = async (req, res) => {
     });
   }
 };
+const getAvailability = async (req, res) => {
+  try {
+    const doctor = await Doctor.findOne({
+      userId: req.user._id,
+    });
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Doctor not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      doctor,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const getMyAppointments = async (req, res) => {
+  try {
+    // Find logged-in doctor's profile
+    const doctor = await Doctor.findOne({
+      userId: req.user._id,
+    });
+await checkDoctorSubscription(doctor);
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Doctor profile not found",
+      });
+    }
+
+    // Get all appointments
+    const appointments = await Appointment.find({
+      doctorId: doctor._id,
+    })
+      .populate("patientId", "name mobile email")
+      .sort({ appointmentDate: -1, tokenNumber: 1 });
+
+    res.status(200).json({
+      success: true,
+      count: appointments.length,
+      appointments,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 const getDoctorEarnings = async (req, res) => {
   try {
     const doctor = await Doctor.findOne({
       userId: req.user._id,
     });
+await checkDoctorSubscription(doctor);
 
     if (!doctor) {
       return res.status(404).json({
@@ -520,6 +734,7 @@ const getDoctorAnalytics = async (req, res) => {
     const doctor = await Doctor.findOne({
       userId: req.user._id,
     });
+await checkDoctorSubscription(doctor);
 
     if (!doctor) {
       return res.status(404).json({
@@ -581,11 +796,13 @@ const getDoctorAnalytics = async (req, res) => {
     });
   }
 };
+
 const updateAvailability = async (req, res) => {
   try {
     const doctor = await Doctor.findOne({
       userId: req.user._id,
     });
+    await checkDoctorSubscription(doctor);
 
     if (!doctor) {
       return res.status(404).json({
@@ -595,14 +812,31 @@ const updateAvailability = async (req, res) => {
     }
 
     const {
+      // Normal
       workingDays,
       clinicStartTime,
       clinicEndTime,
       lunchStart,
       lunchEnd,
       maxNormalAppointments,
+
+      // Premium
+      premiumWorkingDays,
+      premiumStartTime,
+      premiumEndTime,
+      premiumSlotDuration,
+      premiumClinicAddress,
       maxPremiumAppointments,
+
+      // Home Visit
+      homeVisitWorkingDays,
+      homeVisitStartTime,
+      homeVisitEndTime,
+      homeVisitSlotDuration,
+      homeVisitBaseAddress,
       maxHomeVisits,
+
+      // General
       vacationMode,
     } = req.body;
 
@@ -617,6 +851,19 @@ const updateAvailability = async (req, res) => {
     doctor.maxHomeVisits = maxHomeVisits;
 
     doctor.vacationMode = vacationMode;
+    // Premium Settings
+    doctor.premiumWorkingDays = premiumWorkingDays;
+    doctor.premiumStartTime = premiumStartTime;
+    doctor.premiumEndTime = premiumEndTime;
+    doctor.premiumSlotDuration = premiumSlotDuration;
+    doctor.premiumClinicAddress = premiumClinicAddress;
+
+    // Home Visit Settings
+    doctor.homeVisitWorkingDays = homeVisitWorkingDays;
+    doctor.homeVisitStartTime = homeVisitStartTime;
+    doctor.homeVisitEndTime = homeVisitEndTime;
+    doctor.homeVisitSlotDuration = homeVisitSlotDuration;
+    doctor.homeVisitBaseAddress = homeVisitBaseAddress;
 
     await doctor.save();
 
@@ -728,7 +975,13 @@ const searchDoctors = async (req, res) => {
       if (maxFee) filter.consultationFee.$lte = Number(maxFee);
     }
 
-    const doctors = await Doctor.find(filter).select("-__v");
+    const doctors = await Doctor.find({
+      subscriptionStatus: {
+        $in: ["trial", "active"],
+      },
+
+      // keep your existing search conditions here
+    });
 
     res.status(200).json({
       success: true,
@@ -750,9 +1003,12 @@ module.exports = {
   getPremiumSlots,
   getDoctorDashboard,
   getMyDashboard,
+  getAvailability,
   updateHomeVisitStatus,
   getDoctorEarnings,
   getDoctorAnalytics,
   updateAvailability,
   searchDoctors,
+  getMyAppointments,
+  getHomeVisitSlots,
 };

@@ -1,6 +1,7 @@
 const nodemailer = require("nodemailer");
 console.log("EMAIL_USER:", process.env.EMAIL_USER);
 console.log("EMAIL_PASS:", process.env.EMAIL_PASS);
+const passwordResetEmail = require("../templates/passwordResetEmail");
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -13,7 +14,7 @@ const transporter = nodemailer.createTransport({
 const sendEmail = async ({ to, subject, html }) => {
   try {
     await transporter.sendMail({
-      from: `"Nexora Technologies" <${process.env.EMAIL_USER}>`,
+      from: `"SehatRaj | Qurenix Technologies" <${process.env.EMAIL_USER}>`,
       to,
       subject,
       html,
@@ -56,8 +57,23 @@ const sendAppointmentEmail = async (
     console.log(error.message);
   }
 };
+const sendPasswordResetOTP = async (to, name, otp) => {
+  try {
+    await transporter.sendMail({
+      from: `"SehatRaj" <${process.env.EMAIL_USER}>`,
+      to,
+      subject: "Reset Your SehatRaj Password",
+      html: passwordResetEmail(name, otp),
+    });
+
+    console.log("✅ Password reset OTP sent");
+  } catch (error) {
+    console.log(error.message);
+  }
+};
 
 module.exports = {
   sendEmail,
   sendAppointmentEmail,
+  sendPasswordResetOTP,
 };

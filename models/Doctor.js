@@ -51,6 +51,21 @@ const doctorSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    premiumWorkingDays: {
+      type: [String],
+      default: [],
+    },
+
+    premiumSlotDuration: {
+      type: Number,
+      default: 20,
+    },
+
+    premiumClinicAddress: {
+      type: String,
+      default: "",
+    },
+    
     homeVisitFee: {
       type: Number,
       required: true,
@@ -59,6 +74,31 @@ const doctorSchema = new mongoose.Schema(
     homeVisitAvailable: {
       type: Boolean,
       default: false,
+    },
+
+    homeVisitWorkingDays: {
+      type: [String],
+      default: [],
+    },
+
+    homeVisitStartTime: {
+      type: String,
+      default: "16:00",
+    },
+
+    homeVisitEndTime: {
+      type: String,
+      default: "19:00",
+    },
+
+    homeVisitSlotDuration: {
+      type: Number,
+      default: 30,
+    },
+
+    homeVisitAddress: {
+      type: String,
+      default: "",
     },
 
     premiumStartTime: {

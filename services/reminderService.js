@@ -5,13 +5,12 @@ const User = require("../models/User");
 const Doctor = require("../models/Doctor");
 
 const { sendEmail } = require("./emailService");
-
 const reminderEmail = require("../templates/reminderEmail");
 
 const startReminderService = () => {
   cron.schedule("*/5 * * * *", async () => {
     try {
-      console.log("Checking appointment reminders...");
+      console.log("⏰ Checking appointment reminders...");
 
       const now = new Date();
 
@@ -21,37 +20,31 @@ const startReminderService = () => {
         reminder24Sent: false,
       });
 
-      console.log("Appointments Found:", appointments.length);
-
       for (const appointment of appointments) {
-        console.log("--------------------------------");
-        console.log("Booking:", appointment.bookingReference);
-        console.log("Slot Date:", appointment.slotDate);
-        console.log("Slot Time:", appointment.slotTime);
-
         const patient = await User.findById(appointment.patientId);
         const doctor = await Doctor.findById(appointment.doctorId);
 
-        if (!patient || !doctor) continue;
+        if (!patient || !doctor) {
+          console.log(
+            `⚠️ Skipping appointment ${appointment.bookingReference} (Patient or Doctor not found)`,
+          );
+          continue;
+        }
 
-        // Create full appointment date & time
+        // Create appointment date & time
         const appointmentDateTime = new Date(appointment.slotDate);
 
         const [hours, minutes] = appointment.slotTime.split(":").map(Number);
 
-        appointmentDateTime.setHours(hours);
-        appointmentDateTime.setMinutes(minutes);
-        appointmentDateTime.setSeconds(0);
-
-        console.log("Appointment DateTime:", appointmentDateTime);
-        console.log("Current Time:", now);
+        appointmentDateTime.setHours(hours, minutes, 0, 0);
 
         const diff = appointmentDateTime.getTime() - now.getTime();
 
-        console.log("Difference (Hours):", diff / (1000 * 60 * 60));
-
+        // Send reminder within 24 hours
         if (diff > 0 && diff <= 24 * 60 * 60 * 1000) {
-          console.log("Sending reminder to:", patient.email);
+          console.log(
+            `📩 Sending reminder for ${appointment.bookingReference}`,
+          );
 
           await sendEmail({
             to: patient.email,
@@ -63,15 +56,15 @@ const startReminderService = () => {
               appointment.slotTime,
             ),
           });
-appointment.reminder24Sent = true;
-await appointment.save();
-          console.log("✅ Reminder Sent");
-        } else {
-          console.log("❌ Not within next 24 hours");
+
+          appointment.reminder24Sent = true;
+          await appointment.save();
+
+          console.log(`✅ Reminder sent to ${patient.email}`);
         }
       }
     } catch (error) {
-      console.log(error);
+      console.error("❌ Reminder Service Error:", error);
     }
   });
 };

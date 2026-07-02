@@ -1,6 +1,9 @@
 const Appointment = require("../models/Appointment");
+const checkDoctorSubscription = require("../utils/checkDoctorSubscription");
 const sendNotification = require("../services/notificationService");
 const { sendEmail, sendAppointmentEmail } = require("../services/emailService");const User = require("../models/User");
+
+
 const createNormalAppointment = async (req, res) => {
   try {
     const { doctorId } = req.body;
@@ -13,6 +16,15 @@ const createNormalAppointment = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Doctor not found",
+      });
+    }
+    if (
+      doctor.subscriptionStatus === "expired" ||
+      doctor.subscriptionStatus === "suspended"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Doctor is currently unavailable.",
       });
     }
 
@@ -37,24 +49,28 @@ const createNormalAppointment = async (req, res) => {
       today.getDate() + 1,
     );
 
-    const lastAppointment = await Appointment.findOne({
-      doctorId,
-      appointmentDate: {
-        $gte: startOfDay,
-        $lt: endOfDay,
-      },
-    }).sort({ tokenNumber: -1 });
+   const lastAppointment = await Appointment.findOne({
+     doctorId,
+     appointmentType: "normal",
+     appointmentDate: {
+       $gte: startOfDay,
+       $lt: endOfDay,
+     },
+   }).sort({ tokenNumber: -1 });
 
     const nextToken = lastAppointment ? lastAppointment.tokenNumber + 1 : 1;
 
-    const appointment = await Appointment.create({
-      patientId,
-      doctorId,
-      tokenNumber: nextToken,
-      appointmentDate: today,
-    });
-    
-
+    console.log("Doctor Fee:", doctor.consultationFee);
+    console.log("Doctor:", doctor);
+const appointment = await Appointment.create({
+  patientId,
+  doctorId,
+  appointmentType: "normal",
+  amountPaid: doctor.consultationFee,
+  tokenNumber: nextToken,
+  appointmentDate: today,
+});
+console.log("Saved Appointment:", appointment);
     res.status(201).json({
       success: true,
       tokenNumber: nextToken,
@@ -69,6 +85,8 @@ const createNormalAppointment = async (req, res) => {
 };
 
 const Doctor = require("../models/Doctor");
+
+
 const createPremiumAppointment = async (req, res) => {
   try {
     console.log("Request Body:", req.body);
@@ -83,6 +101,16 @@ const createPremiumAppointment = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Doctor not found",
+      });
+    }
+
+    if (
+      doctor.subscriptionStatus === "expired" ||
+      doctor.subscriptionStatus === "suspended"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Doctor is currently unavailable.",
       });
     }
     // Vacation Check
@@ -147,14 +175,14 @@ const createPremiumAppointment = async (req, res) => {
       });
     }
     // 2. Check subscription
-    if (
-      !["active", "trial", "adminApproved"].includes(doctor.subscriptionStatus)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Doctor is currently unavailable",
-      });
-    }
+   await checkDoctorSubscription(doctor);
+
+   if (!["active", "trial"].includes(doctor.subscriptionStatus)) {
+     return res.status(400).json({
+       success: false,
+       message: "Doctor is currently unavailable",
+     });
+   }
 
     // 3. Check duplicate booking
 
@@ -216,17 +244,7 @@ const createPremiumAppointment = async (req, res) => {
     );
     // Send email to patient
 
-    const patient = await User.findById(patientId);
-
-   await sendAppointmentEmail(
-     patient.email,
-     "Appointment Confirmation",
-     patient.name,
-     doctor.name,
-     appointment.bookingReference,
-     slotDate,
-     slotTime,
-   );
+   
     res.status(201).json({
       success: true,
       message: "Premium appointment booked successfully",
@@ -240,16 +258,31 @@ const createPremiumAppointment = async (req, res) => {
     });
   }
 };
+
+
  const createHomeVisitAppointment = async (req, res) => {
   try {
     const {
       doctorId,
+      visitDate,
+      slotTime,
       homeVisitAddress,
       homeVisitLandmark,
       homeVisitCity,
       homeVisitPincode,
     } = req.body;
+    const bookingDate = new Date(visitDate);
+    bookingDate.setHours(0, 0, 0, 0);
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (bookingDate < today) {
+      return res.status(400).json({
+        success: false,
+        message: "Past dates cannot be booked.",
+      });
+    }
     const patientId = req.user._id;
 
     // Find doctor
@@ -291,23 +324,24 @@ const createPremiumAppointment = async (req, res) => {
     }
 
     // Check Daily Home Visit Limit
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  const selectedDate = new Date(visitDate);
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+  selectedDate.setHours(0, 0, 0, 0);
 
-    const homeVisitCount = await Appointment.countDocuments({
-      doctorId,
-      appointmentType: "home",
-      appointmentDate: {
-        $gte: today,
-        $lt: tomorrow,
-      },
-      status: {
-        $nin: ["cancelled", "missed"],
-      },
-    });
+  const nextDay = new Date(selectedDate);
+  nextDay.setDate(selectedDate.getDate() + 1);
+
+  const homeVisitCount = await Appointment.countDocuments({
+    doctorId,
+    appointmentType: "home",
+    slotDate: {
+      $gte: selectedDate,
+      $lt: nextDay,
+    },
+    status: {
+      $nin: ["cancelled", "missed"],
+    },
+  });
 
     if (homeVisitCount >= doctor.maxHomeVisits) {
       return res.status(400).json({
@@ -317,25 +351,30 @@ const createPremiumAppointment = async (req, res) => {
     }
 
     // Create Appointment
-    const appointment = await Appointment.create({
-      patientId,
-      doctorId,
 
-      appointmentType: "home",
+ const appointment = await Appointment.create({
+   patientId,
+   doctorId,
 
-      homeVisitAddress,
-      homeVisitLandmark,
-      homeVisitCity,
-      homeVisitPincode,
+   appointmentType: "home",
 
-      doctorResponse: "pending",
+   slotDate: new Date(visitDate),
 
-      amountPaid: doctor.homeVisitFee,
+   slotTime,
 
-      paymentStatus: "pending",
+   homeVisitAddress,
+   homeVisitLandmark,
+   homeVisitCity,
+   homeVisitPincode,
 
-      status: "pending_payment",
-    });
+   doctorResponse: "pending",
+
+   amountPaid: doctor.homeVisitFee,
+
+   paymentStatus: "pending",
+
+   status: "pending_payment",
+ });
 
     // Notify Doctor
    await sendNotification(
@@ -344,7 +383,17 @@ const createPremiumAppointment = async (req, res) => {
      `A patient has requested a home visit in ${homeVisitCity}.`,
      "homeVisit",
    );
+const patient = await User.findById(patientId);
 
+await sendAppointmentEmail(
+  patient.email,
+  "Home Visit Request",
+  patient.name,
+  doctor.name,
+  appointment.bookingReference,
+  appointment.slotDate,
+  appointment.slotTime,
+);     
     res.status(201).json({
       success: true,
       message: "Home visit appointment created",
@@ -520,6 +569,33 @@ const cancelAppointment = async (req, res) => {
     });
   }
 };
+const getAppointmentTicket = async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id)
+      .populate("patientId", "name mobile email")
+      .populate(
+        "doctorId",
+        "name specialization clinicName clinicAddress consultationFee",
+      );
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      appointment,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 module.exports = {
   createNormalAppointment,
@@ -528,4 +604,5 @@ module.exports = {
   createPremiumAppointment,
   createHomeVisitAppointment,
   cancelAppointment,
+  getAppointmentTicket,
 };

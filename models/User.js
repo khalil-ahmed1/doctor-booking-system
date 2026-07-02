@@ -28,6 +28,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "patient",
     },
+    resetOTP: {
+      type: String,
+    },
+
+    resetOTPExpire: {
+      type: Date,
+    },
+
+    resetOTPVerified: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

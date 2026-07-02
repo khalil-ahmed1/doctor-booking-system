@@ -1,6 +1,8 @@
 const User = require("../models/User");
 const generateToken = require("../config/generateToken");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const { sendPasswordResetOTP } = require("../services/emailService");
 const registerUser = async (req, res) => {
   try {
   const { name, mobile, email, password, role } = req.body;
@@ -24,6 +26,7 @@ const hashedPassword = await bcrypt.hash(password, salt);
     password: hashedPassword,
     role: role || "patient",
   });
+  
 
     res.status(201).json({
       success: true,
@@ -86,7 +89,159 @@ console.log("User found:", user);
     });
   }
 };
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
 
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "No account found with this email",
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+
+    user.resetOTP = otp;
+    user.resetOTPExpire = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    user.resetOTPVerified = false;
+
+    await user.save();
+
+    await sendPasswordResetOTP(user.email, user.name, otp);
+
+    res.status(200).json({
+      success: true,
+      message: "OTP sent to your email.",
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const verifyResetOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP are required",
+      });
+    }
+
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.resetOTP || !user.resetOTPExpire) {
+      return res.status(400).json({
+        success: false,
+        message: "No OTP found. Please request a new OTP.",
+      });
+    }
+
+    if (new Date() > user.resetOTPExpire) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP has expired.",
+      });
+    }
+
+    if (user.resetOTP !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP.",
+      });
+    }
+
+    user.resetOTPVerified = true;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "OTP verified successfully.",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const resetPassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and new password are required",
+      });
+    }
+
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.resetOTPVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Please verify OTP first.",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    user.password = hashedPassword;
+
+    user.resetOTP = undefined;
+    user.resetOTPExpire = undefined;
+    user.resetOTPVerified = false;
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully.",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 const getProfile = async (req, res) => {
   try {
@@ -108,4 +263,7 @@ module.exports = {
   registerUser,
   loginUser,
   getProfile,
+  forgotPassword,
+  verifyResetOTP,
+  resetPassword,
 };
