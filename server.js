@@ -1,8 +1,26 @@
 // Load environment variables FIRST (Must be first line)
 require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
+
+// Initialize Express App instance BEFORE using any middleware
+const app = express();
+
+// Secure Production CORS Middleware
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://doctor-booking-frontend-alpha.vercel.app",
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
+// Other Middleware
+app.use(express.json());
 
 // Database
 const connectDB = require("./config/db");
@@ -27,12 +45,6 @@ const { startReminderService } = require("./services/reminderService");
 // Connect Database
 connectDB();
 
-const app = express();
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
 // Home Route
 app.get("/", (req, res) => {
   res.send("Doctor Booking API Running");
@@ -51,6 +63,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/support", supportRoutes);
 app.use("/api/faq", faqRoutes);
+
 // Start Server
 const PORT = process.env.PORT || 5000;
 
