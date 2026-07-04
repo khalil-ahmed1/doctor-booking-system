@@ -4,11 +4,13 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const compression = require("compression");
 
 // Initialize Express App instance BEFORE using any middleware
 const app = express();
 
 app.use(helmet());
+app.use(compression());
 
 // Global Rate Limiting
 const globalLimiter = rateLimit({
@@ -89,6 +91,16 @@ app.use("/api/email", emailRoutes);
 app.use("/api/support", supportRoutes);
 app.use("/api/faq", faqRoutes);
 
+// Global Error Handler Middleware
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: process.env.NODE_ENV === "production" ? "Internal Server Error" : err.message,
+    ...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
+  });
+});
+
 // Start Server
 const PORT = process.env.PORT || 5000;
 
@@ -96,5 +108,8 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 
   // Start Reminder Service AFTER server starts
-  startReminderService();
+  // Only run if the application is the primary instance
+  if (process.env.NODE_APP_INSTANCE === '0' || !process.env.NODE_APP_INSTANCE) {
+    startReminderService();
+  }
 });

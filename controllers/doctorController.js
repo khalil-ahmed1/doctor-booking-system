@@ -75,7 +75,17 @@ const getAllDoctors = async (req, res) => {
         }
       : {};
 
-    const doctors = await Doctor.find(keyword);
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = req.query.limit !== undefined ? parseInt(req.query.limit, 10) : 0;
+    const skip = (page - 1) * (limit || 0);
+
+    const query = Doctor.find(keyword);
+    if (limit > 0) {
+      query.skip(skip).limit(limit);
+    }
+    
+    const doctors = await query;
+
     res.status(200).json({
       success: true,
       count: doctors.length,

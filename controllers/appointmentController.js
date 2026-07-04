@@ -222,10 +222,8 @@ const createPremiumAppointment = async (req, res) => {
       status: "pending_payment",
     });
     // Send notification to doctor
-    const doctorUser = await Doctor.findById(doctorId);
-
     await sendNotification(
-      doctorUser.userId,
+      doctor.userId,
       "New Premium Appointment",
       `You have received a new premium appointment for ${slotDate} at ${slotTime}.`,
       "appointment",

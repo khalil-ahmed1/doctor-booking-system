@@ -7,6 +7,7 @@ const doctorSchema = new mongoose.Schema(
       ref: "User",
       required: true,
       unique: true,
+      index: true,
     },
     name: {
       type: String,

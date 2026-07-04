@@ -12,12 +12,14 @@ const appointmentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Doctor",
       required: true,
+      index: true,
     },
 
     appointmentType: {
       type: String,
       enum: ["normal", "premium", "home"],
       required: true,
+      index: true,
     },
 
     // Normal Appointment
@@ -38,6 +40,7 @@ const appointmentSchema = new mongoose.Schema(
     appointmentDate: {
       type: Date,
       default: Date.now,
+      index: true,
     },
 
     // Appointment Status
@@ -54,6 +57,7 @@ const appointmentSchema = new mongoose.Schema(
         "rescheduled",
       ],
       default: "pending_payment",
+      index: true,
     },
 
     // Payment
