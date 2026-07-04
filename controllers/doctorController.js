@@ -85,10 +85,11 @@ const getAllDoctors = async (req, res) => {
     }
     
     const doctors = await query;
+    const totalCount = await Doctor.countDocuments(keyword);
 
     res.status(200).json({
       success: true,
-      count: doctors.length,
+      count: totalCount,
       doctors,
     });
   } catch (error) {
@@ -696,59 +697,59 @@ await checkDoctorSubscription(doctor);
       });
     }
 
-    const appointments = await Appointment.find({
-      doctorId: doctor._id,
-      paymentStatus: "paid",
-    });
-
     const now = new Date();
-
-    // Today
-    const startToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-    );
-
-    // Week
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startWeek = new Date(startToday);
     startWeek.setDate(startToday.getDate() - startToday.getDay());
-
-    // Month
     const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    let today = 0;
-    let thisWeek = 0;
-    let thisMonth = 0;
-    let total = 0;
-
-    appointments.forEach((appointment) => {
-      const amount = appointment.amountPaid;
-      const date = appointment.paymentCompletedAt || appointment.updatedAt;
-
-      total += amount;
-
-      if (date >= startToday) {
-        today += amount;
+    const results = await Appointment.aggregate([
+      { $match: { doctorId: doctor._id, paymentStatus: "paid" } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$amountPaid" },
+          today: {
+            $sum: {
+              $cond: [
+                { $gte: [{ $ifNull: ["$paymentCompletedAt", "$updatedAt"] }, startToday] },
+                "$amountPaid",
+                0
+              ]
+            }
+          },
+          thisWeek: {
+            $sum: {
+              $cond: [
+                { $gte: [{ $ifNull: ["$paymentCompletedAt", "$updatedAt"] }, startWeek] },
+                "$amountPaid",
+                0
+              ]
+            }
+          },
+          thisMonth: {
+            $sum: {
+              $cond: [
+                { $gte: [{ $ifNull: ["$paymentCompletedAt", "$updatedAt"] }, startMonth] },
+                "$amountPaid",
+                0
+              ]
+            }
+          }
+        }
       }
+    ]);
 
-      if (date >= startWeek) {
-        thisWeek += amount;
-      }
-
-      if (date >= startMonth) {
-        thisMonth += amount;
-      }
-    });
+    const earnings = results.length > 0 ? {
+      today: results[0].today,
+      thisWeek: results[0].thisWeek,
+      thisMonth: results[0].thisMonth,
+      total: results[0].total
+    } : { today: 0, thisWeek: 0, thisMonth: 0, total: 0 };
 
     res.status(200).json({
       success: true,
-      earnings: {
-        today,
-        thisWeek,
-        thisMonth,
-        total,
-      },
+      earnings,
     });
   } catch (error) {
     res.status(500).json({
@@ -771,46 +772,47 @@ await checkDoctorSubscription(doctor);
       });
     }
 
-    const appointments = await Appointment.find({
-      doctorId: doctor._id,
-    });
+    const results = await Appointment.aggregate([
+      { $match: { doctorId: doctor._id } },
+      {
+        $group: {
+          _id: null,
+          totalAppointments: { $sum: 1 },
+          normalAppointments: { $sum: { $cond: [{ $eq: ["$appointmentType", "normal"] }, 1, 0] } },
+          premiumAppointments: { $sum: { $cond: [{ $eq: ["$appointmentType", "premium"] }, 1, 0] } },
+          homeVisitAppointments: { $sum: { $cond: [{ $eq: ["$appointmentType", "home"] }, 1, 0] } },
+          confirmedAppointments: { $sum: { $cond: [{ $eq: ["$status", "confirmed"] }, 1, 0] } },
+          checkedAppointments: { $sum: { $cond: [{ $eq: ["$status", "checked"] }, 1, 0] } },
+          completedAppointments: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+          cancelledAppointments: { $sum: { $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0] } },
+          missedAppointments: { $sum: { $cond: [{ $eq: ["$status", "missed"] }, 1, 0] } },
+          pendingPaymentAppointments: { $sum: { $cond: [{ $eq: ["$status", "pending_payment"] }, 1, 0] } }
+        }
+      }
+    ]);
 
-    const analytics = {
-      totalAppointments: appointments.length,
-
-      normalAppointments: appointments.filter(
-        (a) => a.appointmentType === "normal",
-      ).length,
-
-      premiumAppointments: appointments.filter(
-        (a) => a.appointmentType === "premium",
-      ).length,
-
-      homeVisitAppointments: appointments.filter(
-        (a) => a.appointmentType === "home",
-      ).length,
-
-      confirmedAppointments: appointments.filter(
-        (a) => a.status === "confirmed",
-      ).length,
-
-      checkedAppointments: appointments.filter((a) => a.status === "checked")
-        .length,
-
-      completedAppointments: appointments.filter(
-        (a) => a.status === "completed",
-      ).length,
-
-      cancelledAppointments: appointments.filter(
-        (a) => a.status === "cancelled",
-      ).length,
-
-      missedAppointments: appointments.filter((a) => a.status === "missed")
-        .length,
-
-      pendingPaymentAppointments: appointments.filter(
-        (a) => a.status === "pending_payment",
-      ).length,
+    const analytics = results.length > 0 ? {
+      totalAppointments: results[0].totalAppointments,
+      normalAppointments: results[0].normalAppointments,
+      premiumAppointments: results[0].premiumAppointments,
+      homeVisitAppointments: results[0].homeVisitAppointments,
+      confirmedAppointments: results[0].confirmedAppointments,
+      checkedAppointments: results[0].checkedAppointments,
+      completedAppointments: results[0].completedAppointments,
+      cancelledAppointments: results[0].cancelledAppointments,
+      missedAppointments: results[0].missedAppointments,
+      pendingPaymentAppointments: results[0].pendingPaymentAppointments
+    } : {
+      totalAppointments: 0,
+      normalAppointments: 0,
+      premiumAppointments: 0,
+      homeVisitAppointments: 0,
+      confirmedAppointments: 0,
+      checkedAppointments: 0,
+      completedAppointments: 0,
+      cancelledAppointments: 0,
+      missedAppointments: 0,
+      pendingPaymentAppointments: 0
     };
 
     res.status(200).json({

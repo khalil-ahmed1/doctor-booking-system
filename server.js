@@ -5,6 +5,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const compression = require("compression");
+const mongoSanitize = require("express-mongo-sanitize");
 
 // Initialize Express App instance BEFORE using any middleware
 const app = express();
@@ -48,6 +49,7 @@ app.use(
 
 // Other Middleware
 app.use(express.json({ limit: "10kb" }));
+app.use(mongoSanitize());
 
 // Database
 const connectDB = require("./config/db");
@@ -94,9 +96,18 @@ app.use("/api/faq", faqRoutes);
 // Global Error Handler Middleware
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(err.status || 500).json({
+  
+  let statusCode = err.statusCode || err.status || 500;
+  let message = err.message || "Internal Server Error";
+
+  if (err.name === 'ValidationError' || err.name === 'CastError') {
+    statusCode = 400;
+    message = err.message;
+  }
+
+  res.status(statusCode).json({
     success: false,
-    message: process.env.NODE_ENV === "production" ? "Internal Server Error" : err.message,
+    message: process.env.NODE_ENV === "production" && statusCode === 500 ? "Internal Server Error" : message,
     ...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
   });
 });

@@ -31,7 +31,7 @@ const hashedPassword = await bcrypt.hash(password, salt);
     mobile,
     email,
     password: hashedPassword,
-    role: role || "patient",
+    role: "patient",
   });
   
 
@@ -184,6 +184,7 @@ const verifyResetOTP = async (req, res) => {
     }
 
     user.resetOTPVerified = true;
+    user.resetOTP = null;
     await user.save();
 
     res.status(200).json({
@@ -219,10 +220,10 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    if (!user.resetOTPVerified) {
+    if (!user.resetOTPVerified || !user.resetOTPExpire || new Date() > user.resetOTPExpire) {
       return res.status(400).json({
         success: false,
-        message: "Please verify OTP first.",
+        message: "OTP verification expired or invalid. Please request a new OTP.",
       });
     }
 

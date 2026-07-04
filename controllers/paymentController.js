@@ -266,15 +266,19 @@ const verifySubscriptionPayment = async (req, res) => {
       });
     }
 
-    const doctor = await Doctor.findById(subscription.doctorId);
-
-    doctor.subscriptionStatus = "active";
-    doctor.subscriptionPlan = subscription.plan;
-    doctor.subscriptionStartDate = startDate;
-    doctor.subscriptionExpiryDate = expiryDate;
-    doctor.subscriptionAmount = subscription.amount;
-
-    await doctor.save();
+    const doctor = await Doctor.findOneAndUpdate(
+      { _id: subscription.doctorId },
+      {
+        $set: {
+          subscriptionStatus: "active",
+          subscriptionPlan: subscription.plan,
+          subscriptionStartDate: startDate,
+          subscriptionExpiryDate: expiryDate,
+          subscriptionAmount: subscription.amount,
+        }
+      },
+      { new: true }
+    );
 
     res.status(200).json({
       success: true,

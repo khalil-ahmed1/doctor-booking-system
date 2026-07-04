@@ -4,7 +4,7 @@ const sendNotification = require("../services/notificationService");
 const { sendEmail, sendAppointmentEmail } = require("../services/emailService");
 const User = require("../models/User");
 const DailyCounter = require("../models/DailyCounter");
-
+const razorpay = require("../config/razorpay");
 
 const createNormalAppointment = async (req, res) => {
   try {
@@ -178,18 +178,8 @@ const createPremiumAppointment = async (req, res) => {
      });
    }
 
-    // 3. Check duplicate booking
+    // 3. Check duplicate booking atomically and limit check
 
-    // Check if this premium slot is already booked
-    const existingAppointment = await Appointment.findOne({
-      doctorId,
-      slotDate: new Date(slotDate),
-      slotTime,
-      appointmentType: "premium",
-      status: {
-        $in: ["booked", "checked", "completed", "rescheduled"],
-      },
-    });
     // Check Daily Premium Limit atomically
     const counterId = `premium_${doctorId}_${new Date(slotDate).getTime()}`;
     const limitReached = !(await DailyCounter.incrementAndCheckLimit(counterId, doctor.maxPremiumAppointments));
@@ -201,26 +191,40 @@ const createPremiumAppointment = async (req, res) => {
       });
     }
 
-    console.log("Existing Appointment:", existingAppointment);
+    const bookingRef = "BK" + Date.now() + Math.floor(Math.random() * 1000);
 
-    if (existingAppointment) {
+    const appointment = await Appointment.findOneAndUpdate(
+      {
+        doctorId,
+        slotDate: new Date(slotDate),
+        slotTime,
+        appointmentType: "premium",
+        status: {
+          $in: ["booked", "checked", "completed", "rescheduled", "pending_payment"],
+        },
+      },
+      {
+        $setOnInsert: {
+          patientId,
+          doctorId,
+          appointmentType: "premium",
+          slotDate,
+          slotTime,
+          paymentStatus: "pending",
+          amountPaid: doctor.premiumFee,
+          status: "pending_payment",
+          bookingReference: bookingRef,
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    if (appointment.bookingReference !== bookingRef) {
       return res.status(400).json({
         success: false,
         message: "This slot is already booked",
       });
     }
-
-    // 4. Create appointment
-    const appointment = await Appointment.create({
-      patientId,
-      doctorId,
-      appointmentType: "premium",
-      slotDate,
-      slotTime,
-      paymentStatus: "pending",
-      amountPaid: doctor.premiumFee,
-      status: "pending_payment",
-    });
     // Send notification to doctor
     await sendNotification(
       doctor.userId,
@@ -323,31 +327,45 @@ const createPremiumAppointment = async (req, res) => {
       });
     }
 
-    // Create Appointment
+    const bookingRef = "BK" + Date.now() + Math.floor(Math.random() * 1000);
 
- const appointment = await Appointment.create({
-   patientId,
-   doctorId,
+    const appointment = await Appointment.findOneAndUpdate(
+      {
+        doctorId,
+        slotDate: new Date(visitDate),
+        slotTime,
+        appointmentType: "home",
+        status: {
+          $in: ["booked", "checked", "completed", "rescheduled", "pending_payment"],
+        },
+      },
+      {
+        $setOnInsert: {
+          patientId,
+          doctorId,
+          appointmentType: "home",
+          slotDate: new Date(visitDate),
+          slotTime,
+          homeVisitAddress,
+          homeVisitLandmark,
+          homeVisitCity,
+          homeVisitPincode,
+          doctorResponse: "pending",
+          amountPaid: doctor.homeVisitFee,
+          paymentStatus: "pending",
+          status: "pending_payment",
+          bookingReference: bookingRef,
+        },
+      },
+      { upsert: true, new: true }
+    );
 
-   appointmentType: "home",
-
-   slotDate: new Date(visitDate),
-
-   slotTime,
-
-   homeVisitAddress,
-   homeVisitLandmark,
-   homeVisitCity,
-   homeVisitPincode,
-
-   doctorResponse: "pending",
-
-   amountPaid: doctor.homeVisitFee,
-
-   paymentStatus: "pending",
-
-   status: "pending_payment",
- });
+    if (appointment.bookingReference !== bookingRef) {
+      return res.status(400).json({
+        success: false,
+        message: "This slot is already booked",
+      });
+    }
 
     // Notify Doctor
    await sendNotification(
@@ -441,6 +459,20 @@ const cancelAppointment = async (req, res) => {
       });
     }
 
+    // Chronological cancellation check
+    const appointmentDate = new Date(appointment.slotDate || appointment.appointmentDate);
+    if (appointment.slotTime) {
+      const [hours, minutes] = appointment.slotTime.split(':');
+      appointmentDate.setHours(Number(hours), Number(minutes), 0, 0);
+    }
+    
+    if (appointmentDate < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot cancel an appointment that has already passed",
+      });
+    }
+
     if (
       appointment.status === "completed" ||
       appointment.status === "checked"
@@ -493,7 +525,18 @@ const cancelAppointment = async (req, res) => {
     appointment.cancelledAt = new Date();
 
     if (appointment.paymentStatus === "paid") {
-      appointment.paymentStatus = "refund_pending";
+      try {
+        if (appointment.paymentId) {
+          const refund = await razorpay.payments.refund(appointment.paymentId, {
+            amount: appointment.amountPaid * 100
+          });
+          appointment.refundId = refund.id;
+        }
+        appointment.paymentStatus = "refund_pending"; 
+      } catch (refundError) {
+        console.error("Refund failed:", refundError);
+        appointment.paymentStatus = "refund_pending"; 
+      }
     }
 
     await appointment.save();
