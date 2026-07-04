@@ -135,44 +135,45 @@ const verifyPayment = async (req, res) => {
       });
     }
 
-    const appointment = await Appointment.findOne({
-      orderId: razorpay_order_id,
-    });
+    const appointment = await Appointment.findOneAndUpdate(
+      { orderId: razorpay_order_id, paymentStatus: { $ne: "paid" } },
+      {
+        $set: {
+          paymentStatus: "paid",
+          status: "confirmed",
+          paymentId: razorpay_payment_id,
+          paymentMethod: "razorpay",
+          paymentCompletedAt: new Date(),
+        },
+      },
+      { new: true }
+    );
 
     console.log("========== VERIFY PAYMENT ==========");
     console.log("Razorpay Order:", razorpay_order_id);
 
-    if (appointment) {
-      console.log("Appointment Found:", appointment._id);
-      console.log("Before Save Payment Status:", appointment.paymentStatus);
-    } else {
-      console.log("Appointment NOT FOUND");
-    }
-
     if (!appointment) {
-      return res.status(404).json({
-        success: false,
-        message: "Appointment not found",
-      });
+      const existingAppt = await Appointment.findOne({ orderId: razorpay_order_id });
+      if (!existingAppt) {
+        console.log("Appointment NOT FOUND");
+        return res.status(404).json({
+          success: false,
+          message: "Appointment not found",
+        });
+      }
+      if (existingAppt.paymentStatus === "paid") {
+        console.log("Payment already completed");
+        return res.status(400).json({
+          success: false,
+          message: "Payment already completed",
+        });
+      }
     }
 
-    if (appointment.paymentStatus === "paid") {
-      return res.status(400).json({
-        success: false,
-        message: "Payment already completed",
-      });
-    }
-
-    appointment.paymentStatus = "paid";
-    appointment.status = "confirmed";
-
-    appointment.paymentId = razorpay_payment_id;
-    appointment.paymentMethod = "razorpay";
-    appointment.paymentCompletedAt = new Date();
-
-    await appointment.save();
+    console.log("Appointment Found:", appointment._id);
     console.log("After Save Payment Status:", appointment.paymentStatus);
     console.log("========== PAYMENT SAVED ==========");
+
 
     // Populate patient & doctor before sending email
     await appointment.populate("patientId", "name email");
@@ -221,39 +222,49 @@ const verifySubscriptionPayment = async (req, res) => {
       });
     }
 
-    const subscription = await DoctorSubscription.findOne({
+    const startDate = new Date();
+
+    const initialSub = await DoctorSubscription.findOne({
       orderId: razorpay_order_id,
     });
 
-    if (!subscription) {
+    if (!initialSub) {
       return res.status(404).json({
         success: false,
         message: "Subscription not found",
       });
     }
 
-    if (subscription.paymentStatus === "paid") {
-      return res.status(400).json({
-        success: false,
-        message: "Subscription already activated",
-      });
-    }
-
-    subscription.paymentStatus = "paid";
-    subscription.paymentId = razorpay_payment_id;
-
-    const startDate = new Date();
-
+    const selectedPlan = SUBSCRIPTION_PLANS[initialSub.plan];
     let expiryDate = new Date();
-
-    const selectedPlan = SUBSCRIPTION_PLANS[subscription.plan];
-
     expiryDate.setMonth(expiryDate.getMonth() + selectedPlan.months);
 
-    subscription.startDate = startDate;
-    subscription.expiryDate = expiryDate;
+    const subscription = await DoctorSubscription.findOneAndUpdate(
+      { orderId: razorpay_order_id, paymentStatus: { $ne: "paid" } },
+      {
+        $set: {
+          paymentStatus: "paid",
+          paymentId: razorpay_payment_id,
+          startDate: startDate,
+          expiryDate: expiryDate,
+        },
+      },
+      { new: true }
+    );
 
-    await subscription.save();
+    if (!subscription) {
+      const existingSub = await DoctorSubscription.findOne({ orderId: razorpay_order_id });
+      if (existingSub && existingSub.paymentStatus === "paid") {
+        return res.status(400).json({
+          success: false,
+          message: "Subscription already activated",
+        });
+      }
+      return res.status(404).json({
+        success: false,
+        message: "Subscription not found",
+      });
+    }
 
     const doctor = await Doctor.findById(subscription.doctorId);
 

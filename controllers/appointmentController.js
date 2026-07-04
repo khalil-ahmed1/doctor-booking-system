@@ -1,7 +1,9 @@
 const Appointment = require("../models/Appointment");
 const checkDoctorSubscription = require("../utils/checkDoctorSubscription");
 const sendNotification = require("../services/notificationService");
-const { sendEmail, sendAppointmentEmail } = require("../services/emailService");const User = require("../models/User");
+const { sendEmail, sendAppointmentEmail } = require("../services/emailService");
+const User = require("../models/User");
+const DailyCounter = require("../models/DailyCounter");
 
 
 const createNormalAppointment = async (req, res) => {
@@ -49,16 +51,8 @@ const createNormalAppointment = async (req, res) => {
       today.getDate() + 1,
     );
 
-   const lastAppointment = await Appointment.findOne({
-     doctorId,
-     appointmentType: "normal",
-     appointmentDate: {
-       $gte: startOfDay,
-       $lt: endOfDay,
-     },
-   }).sort({ tokenNumber: -1 });
-
-    const nextToken = lastAppointment ? lastAppointment.tokenNumber + 1 : 1;
+    const counterId = `normal_${doctorId}_${startOfDay.getTime()}`;
+    const nextToken = await DailyCounter.incrementToken(counterId);
 
     console.log("Doctor Fee:", doctor.consultationFee);
     console.log("Doctor:", doctor);
@@ -196,17 +190,11 @@ const createPremiumAppointment = async (req, res) => {
         $in: ["booked", "checked", "completed", "rescheduled"],
       },
     });
-    // Check Daily Premium Limit
-    const premiumCount = await Appointment.countDocuments({
-      doctorId,
-      appointmentType: "premium",
-      slotDate: new Date(slotDate),
-      status: {
-        $nin: ["cancelled", "missed"],
-      },
-    });
+    // Check Daily Premium Limit atomically
+    const counterId = `premium_${doctorId}_${new Date(slotDate).getTime()}`;
+    const limitReached = !(await DailyCounter.incrementAndCheckLimit(counterId, doctor.maxPremiumAppointments));
 
-    if (premiumCount >= doctor.maxPremiumAppointments) {
+    if (limitReached) {
       return res.status(400).json({
         success: false,
         message: "Maximum premium appointments reached for this day",
@@ -323,27 +311,14 @@ const createPremiumAppointment = async (req, res) => {
       });
     }
 
-    // Check Daily Home Visit Limit
-  const selectedDate = new Date(visitDate);
+    // Check Daily Home Visit Limit atomically
+    const selectedDate = new Date(visitDate);
+    selectedDate.setHours(0, 0, 0, 0);
 
-  selectedDate.setHours(0, 0, 0, 0);
+    const counterId = `home_${doctorId}_${selectedDate.getTime()}`;
+    const limitReached = !(await DailyCounter.incrementAndCheckLimit(counterId, doctor.maxHomeVisits));
 
-  const nextDay = new Date(selectedDate);
-  nextDay.setDate(selectedDate.getDate() + 1);
-
-  const homeVisitCount = await Appointment.countDocuments({
-    doctorId,
-    appointmentType: "home",
-    slotDate: {
-      $gte: selectedDate,
-      $lt: nextDay,
-    },
-    status: {
-      $nin: ["cancelled", "missed"],
-    },
-  });
-
-    if (homeVisitCount >= doctor.maxHomeVisits) {
+    if (limitReached) {
       return res.status(400).json({
         success: false,
         message: "Maximum home visits reached for today",
