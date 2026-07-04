@@ -49,6 +49,22 @@ app.use(
 
 // Other Middleware
 app.use(express.json({ limit: "10kb" }));
+app.use(express.urlencoded({ extended: true, limit: "10kb" }));
+
+// Workaround for express-mongo-sanitize mutating req.query
+app.use((req, res, next) => {
+  if (req.query) {
+    const q = req.query;
+    Object.defineProperty(req, 'query', {
+      value: q,
+      writable: true,
+      enumerable: true,
+      configurable: true
+    });
+  }
+  next();
+});
+
 app.use(mongoSanitize());
 
 // Database
