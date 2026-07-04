@@ -2,9 +2,34 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 
 // Initialize Express App instance BEFORE using any middleware
 const app = express();
+
+app.use(helmet());
+
+// Global Rate Limiting
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(globalLimiter);
+
+// Stricter Rate Limiting for Auth Routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per window for auth routes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many attempts from this IP, please try again after 15 minutes" }
+});
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/forgot-password", authLimiter);
 
 // Secure Production CORS Middleware
 app.use(
@@ -20,7 +45,7 @@ app.use(
 );
 
 // Other Middleware
-app.use(express.json());
+app.use(express.json({ limit: "10kb" }));
 
 // Database
 const connectDB = require("./config/db");

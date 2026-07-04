@@ -7,6 +7,13 @@ const registerUser = async (req, res) => {
   try {
   const { name, mobile, email, password, role } = req.body;
 
+    if (!password || password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters long",
+      });
+    }
+
     // Check if mobile already exists
     const existingUser = await User.findOne({ mobile });
 
@@ -45,10 +52,8 @@ const loginUser = async (req, res) => {
   try {
 const { mobile, password } = req.body;
 
-console.log("Mobile received:", mobile);
 const user = await User.findOne({ mobile });
 
-console.log("User found:", user);
     if (!user) {
       return res.status(400).json({
         success: false,
@@ -56,12 +61,7 @@ console.log("User found:", user);
       });
     }
 
-    console.log("Entered Password:", password);
-    console.log("Stored Hash:", user.password);
-
     const isMatch = await bcrypt.compare(password, user.password);
-
-    console.log("Password Match:", isMatch);
 
     if (!isMatch) {
       return res.status(400).json({
@@ -114,7 +114,10 @@ const forgotPassword = async (req, res) => {
     // Generate 6-digit OTP
     const otp = crypto.randomInt(100000, 999999).toString();
 
-    user.resetOTP = otp;
+    const salt = await bcrypt.genSalt(10);
+    const hashedOTP = await bcrypt.hash(otp, salt);
+
+    user.resetOTP = hashedOTP;
     user.resetOTPExpire = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
     user.resetOTPVerified = false;
 
@@ -171,7 +174,9 @@ const verifyResetOTP = async (req, res) => {
       });
     }
 
-    if (user.resetOTP !== otp) {
+    const isMatch = await bcrypt.compare(otp, user.resetOTP);
+
+    if (!isMatch) {
       return res.status(400).json({
         success: false,
         message: "Invalid OTP.",

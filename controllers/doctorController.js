@@ -62,10 +62,14 @@ const registerDoctor = async (req, res) => {
 };
 const getAllDoctors = async (req, res) => {
   try {
+    const escapeRegex = (string) => {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    };
+
     const keyword = req.query.specialization
       ? {
           specialization: {
-            $regex: req.query.specialization,
+            $regex: escapeRegex(req.query.specialization),
             $options: "i",
           },
         }
