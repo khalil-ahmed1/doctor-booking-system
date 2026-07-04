@@ -441,6 +441,16 @@ const cancelAppointment = async (req, res) => {
       });
     }
 
+    if (
+      appointment.status === "completed" ||
+      appointment.status === "checked"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot cancel an appointment that has already been attended",
+      });
+    }
+
     // Already cancelled
     if (
       appointment.status === "cancelled_by_patient" ||

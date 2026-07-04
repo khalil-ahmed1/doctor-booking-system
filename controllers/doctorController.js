@@ -179,6 +179,13 @@ const getPremiumSlots = async (req, res) => {
     const end = doctor.premiumEndTime;
     const duration = doctor.premiumSlotDuration;
 
+    if (!duration || duration <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid premium slot duration",
+      });
+    }
+
     let [startHour, startMinute] = start.split(":").map(Number);
 
     let [endHour, endMinute] = end.split(":").map(Number);
@@ -312,6 +319,13 @@ const getHomeVisitSlots = async (req, res) => {
     const end = doctor.homeVisitEndTime;
 
     const duration = doctor.homeVisitSlotDuration;
+
+    if (!duration || duration <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid home visit slot duration",
+      });
+    }
 
     let [startHour, startMinute] = start.split(":").map(Number);
 

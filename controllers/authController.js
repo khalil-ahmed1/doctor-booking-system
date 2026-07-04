@@ -230,8 +230,8 @@ const resetPassword = async (req, res) => {
 
     user.password = hashedPassword;
 
-    user.resetOTP = undefined;
-    user.resetOTPExpire = undefined;
+    user.resetOTP = null;
+    user.resetOTPExpire = null;
     user.resetOTPVerified = false;
 
     await user.save();
