@@ -68,11 +68,11 @@ const getAllDoctors = async (req, res) => {
 
     const keyword = req.query.specialization
       ? {
-          specialization: {
-            $regex: escapeRegex(req.query.specialization),
-            $options: "i",
-          },
-        }
+        specialization: {
+          $regex: escapeRegex(req.query.specialization),
+          $options: "i",
+        },
+      }
       : {};
 
     const page = parseInt(req.query.page, 10) || 1;
@@ -83,7 +83,7 @@ const getAllDoctors = async (req, res) => {
     if (limit > 0) {
       query.skip(skip).limit(limit);
     }
-    
+
     const doctors = await query;
     const totalCount = await Doctor.countDocuments(keyword);
 
@@ -104,12 +104,12 @@ const getDoctorById = async (req, res) => {
   console.log("GET DOCTOR BY ID API HIT");
   console.log("Doctor ID:", req.params.id);
   try {
-   const doctor = await Doctor.findOne({
-     _id: req.params.id,
-     subscriptionStatus: {
-       $in: ["trial", "active"],
-     },
-   });
+    const doctor = await Doctor.findOne({
+      _id: req.params.id,
+      subscriptionStatus: {
+        $in: ["trial", "active"],
+      },
+    });
 
     if (!doctor) {
       return res.status(404).json({
@@ -195,35 +195,35 @@ const getPremiumSlots = async (req, res) => {
 
     const endMinutes = endHour * 60 + endMinute;
 
-while (currentMinutes < endMinutes) {
-  const slotMinutes = currentMinutes;
+    while (currentMinutes < endMinutes) {
+      const slotMinutes = currentMinutes;
 
-  const lunchStart =
-    Number(doctor.lunchStart.split(":")[0]) * 60 +
-    Number(doctor.lunchStart.split(":")[1]);
+      const lunchStart =
+        Number(doctor.lunchStart.split(":")[0]) * 60 +
+        Number(doctor.lunchStart.split(":")[1]);
 
-  const lunchEnd =
-    Number(doctor.lunchEnd.split(":")[0]) * 60 +
-    Number(doctor.lunchEnd.split(":")[1]);
+      const lunchEnd =
+        Number(doctor.lunchEnd.split(":")[0]) * 60 +
+        Number(doctor.lunchEnd.split(":")[1]);
 
-  // Skip lunch slots
-  if (slotMinutes >= lunchStart && slotMinutes < lunchEnd) {
-    currentMinutes += duration;
-    continue;
-  }
+      // Skip lunch slots
+      if (slotMinutes >= lunchStart && slotMinutes < lunchEnd) {
+        currentMinutes += duration;
+        continue;
+      }
 
-  const hours = Math.floor(currentMinutes / 60);
-  const minutes = currentMinutes % 60;
+      const hours = Math.floor(currentMinutes / 60);
+      const minutes = currentMinutes % 60;
 
-  const slot = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
-    2,
-    "0",
-  )}`;
+      const slot = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+        2,
+        "0",
+      )}`;
 
-  slots.push(slot);
+      slots.push(slot);
 
-  currentMinutes += duration;
-}
+      currentMinutes += duration;
+    }
     // Get booking date from query
     const selectedDate = req.query.date;
     const bookingDate = new Date(selectedDate);
@@ -394,7 +394,7 @@ const getHomeVisitSlots = async (req, res) => {
     });
   }
 };
- const getDoctorDashboard = async (req, res) => {
+const getDoctorDashboard = async (req, res) => {
   try {
     const doctorId = req.params.id;
 
@@ -655,7 +655,7 @@ const getMyAppointments = async (req, res) => {
     const doctor = await Doctor.findOne({
       userId: req.user._id,
     });
-await checkDoctorSubscription(doctor);
+    await checkDoctorSubscription(doctor);
 
     if (!doctor) {
       return res.status(404).json({
@@ -688,7 +688,7 @@ const getDoctorEarnings = async (req, res) => {
     const doctor = await Doctor.findOne({
       userId: req.user._id,
     });
-await checkDoctorSubscription(doctor);
+    await checkDoctorSubscription(doctor);
 
     if (!doctor) {
       return res.status(404).json({
@@ -763,7 +763,7 @@ const getDoctorAnalytics = async (req, res) => {
     const doctor = await Doctor.findOne({
       userId: req.user._id,
     });
-await checkDoctorSubscription(doctor);
+    await checkDoctorSubscription(doctor);
 
     if (!doctor) {
       return res.status(404).json({
@@ -965,8 +965,7 @@ const updateHomeVisitStatus = async (req, res) => {
 };
 const searchDoctors = async (req, res) => {
   try {
-    const { specialization, clinic, homeVisit, premium, minFee, maxFee } =
-      req.query;
+    const { keyword } = req.query;
 
     let filter = {
       subscriptionStatus: {
@@ -975,43 +974,14 @@ const searchDoctors = async (req, res) => {
       vacationMode: false,
     };
 
-    if (specialization) {
-      filter.specialization = {
-        $regex: specialization,
-        $options: "i",
-      };
+    if (keyword) {
+      filter.$or = [
+        { name: { $regex: keyword, $options: "i" } },
+        { specialization: { $regex: keyword, $options: "i" } },
+      ];
     }
 
-    if (clinic) {
-      filter.clinicName = {
-        $regex: clinic,
-        $options: "i",
-      };
-    }
-
-    if (homeVisit === "true") {
-      filter.homeVisitAvailable = true;
-    }
-
-    if (premium === "true") {
-      filter.premiumBookingEnabled = true;
-    }
-
-    if (minFee || maxFee) {
-      filter.consultationFee = {};
-
-      if (minFee) filter.consultationFee.$gte = Number(minFee);
-
-      if (maxFee) filter.consultationFee.$lte = Number(maxFee);
-    }
-
-    const doctors = await Doctor.find({
-      subscriptionStatus: {
-        $in: ["trial", "active"],
-      },
-
-      // keep your existing search conditions here
-    });
+    const doctors = await Doctor.find(filter);
 
     res.status(200).json({
       success: true,
