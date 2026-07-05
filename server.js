@@ -48,7 +48,14 @@ app.use(
 );
 
 // Other Middleware
-app.use(express.json({ limit: "10kb" }));
+app.use(
+  express.json({
+    limit: "10kb",
+    verify: (req, res, buf) => {
+      req.rawBody = buf.toString();
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 
 // Workaround for express-mongo-sanitize mutating req.query

@@ -295,9 +295,132 @@ const verifySubscriptionPayment = async (req, res) => {
   }
 };
 
+const razorpayWebhook = async (req, res) => {
+  try {
+    const signature = req.headers["x-razorpay-signature"];
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (!signature || !secret) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing signature or secret",
+      });
+    }
+
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(req.rawBody || JSON.stringify(req.body))
+      .digest("hex");
+
+    if (expectedSignature !== signature) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid signature",
+      });
+    }
+
+    const event = req.body.event;
+    const paymentEntity = req.body.payload?.payment?.entity;
+
+    if (!paymentEntity) {
+      return res.status(200).json({ success: true, message: "No payment entity" });
+    }
+
+    const orderId = paymentEntity.order_id;
+    const paymentId = paymentEntity.id;
+
+    if (event === "payment.captured") {
+      // 1. Check if it's an Appointment
+      const appointment = await Appointment.findOne({ orderId });
+      
+      if (appointment) {
+        if (appointment.paymentStatus !== "paid") {
+          appointment.paymentStatus = "paid";
+          appointment.status = "confirmed";
+          appointment.paymentId = paymentId;
+          appointment.paymentMethod = "razorpay";
+          appointment.paymentCompletedAt = new Date();
+          await appointment.save();
+
+          // Send Confirmation Email
+          await appointment.populate("patientId", "name email");
+          await appointment.populate("doctorId", "name");
+          
+          if (appointment.patientId && appointment.patientId.email) {
+             await sendAppointmentEmail(
+               appointment.patientId.email,
+               "Appointment Confirmed - SehatRaj",
+               appointment.patientId.name,
+               appointment.doctorId.name,
+               appointment.bookingReference,
+               new Date(appointment.appointmentDate).toLocaleDateString(),
+               appointment.slotTime || appointment.tokenNumber
+             );
+          }
+        }
+        return res.status(200).json({ success: true });
+      }
+
+      // 2. Check if it's a Subscription
+      const subscription = await DoctorSubscription.findOne({ orderId });
+      
+      if (subscription) {
+        if (subscription.paymentStatus !== "paid") {
+          const startDate = new Date();
+          const selectedPlan = SUBSCRIPTION_PLANS[subscription.plan];
+          let expiryDate = new Date();
+          expiryDate.setMonth(expiryDate.getMonth() + selectedPlan.months);
+          
+          subscription.paymentStatus = "paid";
+          subscription.paymentId = paymentId;
+          subscription.startDate = startDate;
+          subscription.expiryDate = expiryDate;
+          await subscription.save();
+
+          await Doctor.findOneAndUpdate(
+            { _id: subscription.doctorId },
+            {
+              $set: {
+                subscriptionStatus: "active",
+                subscriptionPlan: subscription.plan,
+                subscriptionStartDate: startDate,
+                subscriptionExpiryDate: expiryDate,
+                subscriptionAmount: subscription.amount,
+              },
+            }
+          );
+        }
+        return res.status(200).json({ success: true });
+      }
+
+    } else if (event === "payment.failed") {
+      const appointment = await Appointment.findOne({ orderId });
+      if (appointment && appointment.paymentStatus !== "paid") {
+         appointment.paymentStatus = "failed";
+         await appointment.save();
+      }
+      
+      const subscription = await DoctorSubscription.findOne({ orderId });
+      if (subscription && subscription.paymentStatus !== "paid") {
+         subscription.paymentStatus = "failed";
+         await subscription.save();
+      }
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Razorpay Webhook Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   createOrder,
   verifyPayment,
   createSubscriptionOrder,
   verifySubscriptionPayment,
+  razorpayWebhook,
 };

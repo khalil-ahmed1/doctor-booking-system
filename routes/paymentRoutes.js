@@ -13,6 +13,7 @@ const {
   verifyPayment,
   createSubscriptionOrder,
   verifySubscriptionPayment,
+  razorpayWebhook,
 } = require("../controllers/paymentController");
 
 router.post("/create-order", protect, patientOnly, createOrder);
@@ -30,4 +31,7 @@ router.post(
   doctorOnly,
   verifySubscriptionPayment,
 );
+
+router.post("/webhook", razorpayWebhook);
+
 module.exports = router;
