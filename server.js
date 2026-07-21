@@ -42,7 +42,7 @@ app.use(
       "https://doctor-booking-frontend-alpha.vercel.app",
     ],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
@@ -119,7 +119,7 @@ app.use("/api/faq", faqRoutes);
 // Global Error Handler Middleware
 app.use((err, req, res, next) => {
   console.error(err);
-  
+
   let statusCode = err.statusCode || err.status || 500;
   let message = err.message || "Internal Server Error";
 
